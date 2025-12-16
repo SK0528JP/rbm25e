@@ -1,0 +1,26 @@
+name: Discord Bot
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"   # 5分ごとに再起動保険
+  workflow_dispatch:
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350   # 約5.8時間
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run bot
+        run: |
+          python main.py
