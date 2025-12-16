@@ -1,165 +1,117 @@
-import discord
-from discord import app_commands
-from discord.ext import commands
-import asyncio
-import json
 import os
+import asyncio
+import random
 from datetime import datetime, timezone, timedelta
 
-# ========= 基本設定 =========
+import discord
+from discord.ext import commands, tasks
+from discord import app_commands
+
+# ===== 基本設定 =====
 TOKEN = os.getenv("DISCORD_BOT_TOKEN")
-CONFIG_FILE = "config.json"
-# ============================
 
-# ---------- config 読み書き ----------
-def load_config():
-    if not os.path.exists(CONFIG_FILE):
-        data = {
-            "jst_channel_id": None,
-            "utc_channel_id": None
-        }
-        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2)
-        return data
-
-    with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-        return json.load(f)
-
-def save_config(data):
-    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2)
-
-config = load_config()
-
-# ---------- Bot ----------
 intents = discord.Intents.default()
-bot = commands.Bot(command_prefix="!", intents=intents)
+intents.guilds = True
+intents.messages = True
 
-# ---------- Ping ----------
-@bot.tree.command(name="ping", description="Botの応答速度確認")
-async def ping(interaction: discord.Interaction):
-    latency = round(bot.latency * 1000)
-    await interaction.response.send_message(f"Pong | {latency}ms")
+JST = timezone(timedelta(hours=9))
 
-# ---------- じゃんけん（ボタン式） ----------
-janken_rooms = {}  # {channel_id: {user_id: hand}}
+# ===== Botクラス =====
+class MyBot(commands.Bot):
+    async def setup_hook(self):
+        try:
+            await self.tree.sync()
+            print("Slash commands synced")
+        except Exception as e:
+            print(f"Sync failed: {e}")
 
-WIN_MAP = {
-    "rock": "scissors",
-    "scissors": "paper",
-    "paper": "rock"
-}
+bot = MyBot(command_prefix="!", intents=intents)
 
-class JankenView(discord.ui.View):
-    def __init__(self, channel_id):
-        super().__init__(timeout=60)
-        self.channel_id = channel_id
-
-    async def register(self, interaction, hand):
-        room = janken_rooms.get(self.channel_id)
-        if room is None:
-            await interaction.response.send_message("じゃんけん未開始", ephemeral=True)
-            return
-
-        room[interaction.user.id] = hand
-        await interaction.response.send_message("受付完了", ephemeral=True)
-
-    @discord.ui.button(label="✊ グー", style=discord.ButtonStyle.primary)
-    async def rock(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await self.register(interaction, "rock")
-
-    @discord.ui.button(label="✌ チョキ", style=discord.ButtonStyle.success)
-    async def scissors(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await self.register(interaction, "scissors")
-
-    @discord.ui.button(label="✋ パー", style=discord.ButtonStyle.danger)
-    async def paper(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await self.register(interaction, "paper")
-
-@bot.tree.command(name="janken_start", description="じゃんけん開始")
-async def janken_start(interaction: discord.Interaction):
-    janken_rooms[interaction.channel_id] = {}
-    view = JankenView(interaction.channel_id)
-    await interaction.response.send_message("じゃんけん開始：ボタンを押せ", view=view)
-
-@bot.tree.command(name="janken_result", description="じゃんけん結果表示")
-async def janken_result(interaction: discord.Interaction):
-    room = janken_rooms.get(interaction.channel_id)
-    if not room or len(room) < 2:
-        await interaction.response.send_message("参加者不足")
-        return
-
-    hands = set(room.values())
-
-    if len(hands) != 2:
-        await interaction.response.send_message("引き分け")
-        janken_rooms.pop(interaction.channel_id)
-        return
-
-    h1, h2 = list(hands)
-    win_hand = h1 if WIN_MAP[h1] == h2 else h2
-    winners = [f"<@{uid}>" for uid, h in room.items() if h == win_hand]
-
-    await interaction.response.send_message(f"勝者：{' '.join(winners)}")
-    janken_rooms.pop(interaction.channel_id)
-
-# ---------- 時報設定 ----------
-@bot.tree.command(name="set_jst_channel", description="JST時報チャンネル設定")
-async def set_jst_channel(interaction: discord.Interaction):
-    config["jst_channel_id"] = interaction.channel_id
-    save_config(config)
-    await interaction.response.send_message("JST時報チャンネル設定完了")
-
-@bot.tree.command(name="set_utc_channel", description="UTC時報チャンネル設定")
-async def set_utc_channel(interaction: discord.Interaction):
-    config["utc_channel_id"] = interaction.channel_id
-    save_config(config)
-    await interaction.response.send_message("UTC時報チャンネル設定完了")
-
-# ---------- 時報ループ ----------
-async def time_signal():
-    await bot.wait_until_ready()
-    sent_jst = False
-    sent_utc = False
-
-    while not bot.is_closed():
-        now_utc = datetime.now(timezone.utc)
-        now_jst = now_utc.astimezone(timezone(timedelta(hours=9)))
-
-        if now_jst.hour == 0 and now_jst.minute == 0:
-            if not sent_jst and config.get("jst_channel_id"):
-                ch = bot.get_channel(config["jst_channel_id"])
-                if ch:
-                    await ch.send("【時報】日本標準時 0:00")
-                sent_jst = True
-        else:
-            sent_jst = False
-
-        if now_utc.hour == 0 and now_utc.minute == 0:
-            if not sent_utc and config.get("utc_channel_id"):
-                ch = bot.get_channel(config["utc_channel_id"])
-                if ch:
-                    await ch.send("【時報】UTC 0:00")
-                sent_utc = True
-        else:
-            sent_utc = False
-
-        await asyncio.sleep(30)
-
-# ---------- 起動 ----------
+# ===== on_ready =====
 @bot.event
 async def on_ready():
-    await bot.tree.sync()
-
     await bot.change_presence(
-        status=discord.Status.idle,  # 退席中
+        status=discord.Status.idle,
         activity=discord.Activity(
-            type=discord.ActivityType.listening,  # ♬ マーク
-            name="労働中"
+            type=discord.ActivityType.listening,
+            name="🎵 労働中"
         )
     )
-
-    bot.loop.create_task(time_signal())
     print(f"Logged in as {bot.user}")
+    time_signal.start()
 
+# ===== /ping =====
+@bot.tree.command(name="ping", description="BOTの遅延を表示")
+async def ping(interaction: discord.Interaction):
+    latency = round(bot.latency * 1000)
+    await interaction.response.send_message(f"Pong 🏓 {latency}ms")
+
+# ===== じゃんけん =====
+class JankenView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    async def play(self, interaction: discord.Interaction, user_hand: str):
+        bot_hand = random.choice(["グー", "チョキ", "パー"])
+
+        if user_hand == bot_hand:
+            result = "引き分け"
+        elif (
+            (user_hand == "グー" and bot_hand == "チョキ") or
+            (user_hand == "チョキ" and bot_hand == "パー") or
+            (user_hand == "パー" and bot_hand == "グー")
+        ):
+            result = "勝ち"
+        else:
+            result = "負け"
+
+        await interaction.response.send_message(
+            f"{interaction.user.mention}\n"
+            f"あなた：{user_hand}\n"
+            f"BOT：{bot_hand}\n"
+            f"結果：{result}",
+            ephemeral=False
+        )
+
+    @discord.ui.button(label="グー", style=discord.ButtonStyle.primary)
+    async def rock(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.play(interaction, "グー")
+
+    @discord.ui.button(label="チョキ", style=discord.ButtonStyle.primary)
+    async def scissors(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.play(interaction, "チョキ")
+
+    @discord.ui.button(label="パー", style=discord.ButtonStyle.primary)
+    async def paper(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.play(interaction, "パー")
+
+@bot.tree.command(name="janken", description="じゃんけんをする")
+async def janken(interaction: discord.Interaction):
+    await interaction.response.send_message(
+        "じゃんけん開始",
+        view=JankenView()
+    )
+
+# ===== 時報 =====
+@tasks.loop(seconds=30)
+async def time_signal():
+    now_utc = datetime.now(timezone.utc)
+    now_jst = now_utc.astimezone(JST)
+
+    if now_jst.hour == 0 and now_jst.minute == 0:
+        await send_time_signal("JST")
+
+    if now_utc.hour == 0 and now_utc.minute == 0:
+        await send_time_signal("UTC")
+
+async def send_time_signal(label: str):
+    for guild in bot.guilds:
+        channel = guild.system_channel
+        if channel:
+            try:
+                await channel.send(f"⏰ {label} 00:00 時報")
+            except:
+                pass
+
+# ===== 起動 =====
 bot.run(TOKEN)
