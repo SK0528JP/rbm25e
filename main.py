@@ -91,7 +91,7 @@ async def janken(interaction: discord.Interaction):
         "じゃんけん開始",
         view=JankenView()
     )
-
+    
 # ===== 時報 =====
 @tasks.loop(seconds=30)
 async def time_signal():
