@@ -76,7 +76,7 @@ class JankenView(discord.ui.View):
     @discord.ui.button(label="グー", style=discord.ButtonStyle.primary)
     async def rock(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.play(interaction, "グー")
-
+ 
     @discord.ui.button(label="チョキ", style=discord.ButtonStyle.primary)
     async def scissors(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.play(interaction, "チョキ")
