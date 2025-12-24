@@ -3,12 +3,17 @@ name: Discord Bot
 on:
   push:
     branches: [ "*" ]
+  workflow_dispatch: # 手動実行ボタンも有効化
 
 jobs:
   run-bot:
     runs-on: ubuntu-latest
+    # 24時間以上の連続実行はGitHubの制限に触れる可能性があるが、
+    # pushのたびに新しいインスタンスが立ち上がり、Gistからデータを引き継ぐ。
+    
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -16,9 +21,14 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: pip install discord.py aiohttp
+        run: |
+          python -m pip install --upgrade pip
+          pip install discord.py aiohttp requests
 
       - name: Run bot
         env:
+          # Repository Secretsから環境変数を注入
           DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          MY_GITHUB_TOKEN: ${{ secrets.MY_GITHUB_TOKEN }}
+          GIST_ID: ${{ secrets.GIST_ID }}
         run: python main.py
