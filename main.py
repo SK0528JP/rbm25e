@@ -11,43 +11,26 @@ from discord import app_commands
 # ===== 基本設定 =====
 TOKEN = os.getenv("DISCORD_BOT_TOKEN")
 
-# インテント設定
 intents = discord.Intents.default()
 intents.guilds = True
 intents.messages = True
 intents.message_content = True
 
-# タイムゾーン & テーマカラー
 JST = timezone(timedelta(hours=9))
 THEME_COLOR = 0xCC0000 
-
-# データ保存用ファイル名
 DATA_FILE = "soviet_data.json"
 
-# ===== 名言リスト (アーカイブ) =====
-# フォーマット: {"text": "名言本文", "author": "発言者", "faction": "勢力"}
+# ===== 名言データベース =====
 QUOTES_ARCHIVE = [
-    # ソビエト連邦
     {"text": "学習し、学習し、そして学習することだ。", "author": "ウラジーミル・レーニン", "faction": "ソビエト連邦"},
     {"text": "一人の死は悲劇だが、数百万人の死は統計上の数字に過ぎない。", "author": "ヨシフ・スターリン", "faction": "ソビエト連邦"},
     {"text": "幹部がすべてを決定する。", "author": "ヨシフ・スターリン", "faction": "ソビエト連邦"},
     {"text": "地球は青かった。", "author": "ユーリ・ガガーリン", "faction": "ソビエト連邦"},
     {"text": "信頼せよ、だが検証せよ。", "author": "ロシアのことわざ", "faction": "ソビエト連邦"},
-    {"text": "不可能なことなどない。不可能なのは、我々がそう思い込んでいるだけだ。", "author": "ミハイル・トゥハチェフスキー", "faction": "ソビエト連邦"},
-
-    # ドイツ（軍事・哲学・戦略）
     {"text": "汗を流せば流すほど、血を流さずに済む。", "author": "エルヴィン・ロンメル", "faction": "ドイツ"},
     {"text": "計画がその通りに進むことなど、実戦では稀である。", "author": "ヘルムート・フォン・モルトケ", "faction": "ドイツ"},
-    {"text": "戦いにおいては、精神的な要素と物理的な要素の比率は３対１である。", "author": "ナポレオン（ドイツ軍事思想に影響）", "faction": "軍事格言"},
-    {"text": "嘘も百回言えば真実となる。", "author": "プロパガンダの格言", "faction": "ドイツ"},
-    {"text": "兵士諸君、君たちの栄光は、君たちの犠牲の中にある。", "author": "エーリッヒ・フォン・マンシュタイン", "faction": "ドイツ"},
-    {"text": "危険な状況では、何もしないことが最大の誤りである。", "author": "ハインツ・グデーリアン", "faction": "ドイツ"},
-
-    # スウェーデン王国
     {"text": "主は我が守りなり。", "author": "グスタフ2世アドルフ", "faction": "スウェーデン王国"},
-    {"text": "私は私の兵士たちが何を食べるかを知るまでは食事をとらない。", "author": "カール12世", "faction": "スウェーデン王国"},
-    {"text": "北方の獅子は眠らない。", "author": "伝承", "faction": "スウェーデン王国"},
-    {"text": "平和なときにこそ、戦争の準備をせよ。", "author": "スウェーデン民間防衛読本", "faction": "スウェーデン王国"},
+    {"text": "私は私の兵士たちが何を食べるかを知るまでは食事をとらない。", "author": "カール12世", "faction": "スウェーデン王国"}
 ]
 
 # ===== Botクラス ===== 
@@ -55,166 +38,150 @@ class SovietBot(commands.Bot):
     def __init__(self):
         super().__init__(command_prefix="!", intents=intents)
         self.last_signal_hour = -1 
-        self.user_data = {} # ユーザーデータをメモリに保持
+        self.user_data = {}
 
     async def setup_hook(self):
-        self.load_data() # 起動時にデータを読み込む
+        self.load_data()
         try:
             await self.tree.sync()
-            print("--- 指令システムの同期完了 ---")
+            print("--- 全指令システムの同期を完了した ---")
         except Exception as e:
             print(f"同期失敗: {e}")
 
-    # --- データ保存・読込 ---
     def load_data(self):
         if os.path.exists(DATA_FILE):
             try:
                 with open(DATA_FILE, "r", encoding="utf-8") as f:
                     self.user_data = json.load(f)
-            except Exception as e:
-                print(f"データ読み込みエラー: {e}")
+            except:
                 self.user_data = {}
         else:
             self.user_data = {}
 
     def save_data(self):
-        try:
-            with open(DATA_FILE, "w", encoding="utf-8") as f:
-                json.dump(self.user_data, f, ensure_ascii=False, indent=4)
-        except Exception as e:
-            print(f"データ保存エラー: {e}")
+        with open(DATA_FILE, "w", encoding="utf-8") as f:
+            json.dump(self.user_data, f, ensure_ascii=False, indent=4)
 
-    # --- 経験値加算ロジック ---
     async def add_xp(self, user_id: str):
-        # データ構造: {"user_id": {"xp": 100, "last_msg": timestamp}}
         now = datetime.now().timestamp()
-        
         if user_id not in self.user_data:
             self.user_data[user_id] = {"xp": 0, "last_msg": 0}
         
-        # クールダウン（連投対策: 5秒に1回のみ加算）
-        last_time = self.user_data[user_id].get("last_msg", 0)
-        if now - last_time < 5:
+        if now - self.user_data[user_id].get("last_msg", 0) < 5:
             return
 
-        # ランダムでXP付与 (10〜20)
-        xp_gain = random.randint(10, 20)
-        self.user_data[user_id]["xp"] += xp_gain
+        self.user_data[user_id]["xp"] += random.randint(10, 20)
         self.user_data[user_id]["last_msg"] = now
-        
         self.save_data()
 
 bot = SovietBot()
 
+# ===== じゃんけん View クラス =====
+class JankenView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=60)
+
+    async def play(self, interaction: discord.Interaction, user_hand: str):
+        bot_hand = random.choice(["グー", "チョキ", "パー"])
+        hands_emoji = {"グー": "✊", "チョキ": "✌️", "パー": "✋"}
+        
+        if user_hand == bot_hand:
+            result_text, footer = "引き分け", "両者譲らず。交渉は継続される。"
+        elif (
+            (user_hand == "グー" and bot_hand == "チョキ") or
+            (user_hand == "チョキ" and bot_hand == "パー") or
+            (user_hand == "パー" and bot_hand == "グー")
+        ):
+            result_text, footer = "勝利", "お見事です、同志！ 人民の勝利だ！"
+        else:
+            result_text, footer = "敗北", "資本主義的な軟弱さが露見したな。出直したまえ。"
+
+        embed = discord.Embed(title="☭ 戦略的決着の結果", color=THEME_COLOR)
+        embed.add_field(name="同志の手", value=f"{hands_emoji[user_hand]} {user_hand}", inline=True)
+        embed.add_field(name="国家の手", value=f"{hands_emoji[bot_hand]} {bot_hand}", inline=True)
+        embed.add_field(name="判定", value=f"**{result_text}**", inline=False)
+        embed.set_footer(text=footer)
+        await interaction.response.send_message(embed=embed)
+
+    @discord.ui.button(label="強行突破", style=discord.ButtonStyle.danger, emoji="✊")
+    async def rock(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.play(interaction, "グー")
+ 
+    @discord.ui.button(label="分断工作", style=discord.ButtonStyle.danger, emoji="✌️")
+    async def scissors(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.play(interaction, "チョキ")
+
+    @discord.ui.button(label="包囲作戦", style=discord.ButtonStyle.danger, emoji="✋")
+    async def paper(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.play(interaction, "パー")
+
 # ===== イベント =====
 @bot.event
 async def on_ready():
-    await bot.change_presence(
-        status=discord.Status.online,
-        activity=discord.Activity(type=discord.ActivityType.watching, name="同志の勤務態度")
-    )
-    print(f"同志 {bot.user} が接続しました。")
+    await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name="同志の勤務態度"))
+    print(f"同志 {bot.user} が現線に復帰した。")
     if not time_signal.is_running():
         time_signal.start()
 
 @bot.event
 async def on_message(message):
-    if message.author.bot:
-        return
-
-    # メッセージ送信で経験値を加算
+    if message.author.bot: return
     await bot.add_xp(str(message.author.id))
-
-    # コマンド処理へ
     await bot.process_commands(message)
 
-# ===== /ping =====
+# ===== コマンド群 =====
+
 @bot.tree.command(name="ping", description="通信状況の確認")
 async def ping(interaction: discord.Interaction):
     latency = round(bot.latency * 1000)
     await interaction.response.send_message(f"通信良好。遅延: **{latency}ms**", ephemeral=True)
 
-# ===== /meigen (歴史的名言) =====
-@bot.tree.command(name="meigen", description="歴史的指導者や軍人たちの金言を表示する")
-async def meigen(interaction: discord.Interaction):
-    quote = random.choice(QUOTES_ARCHIVE)
-    
-    # 勢力によって色を変える演出（任意）
-    color = THEME_COLOR # デフォルト赤
-    if quote["faction"] == "ドイツ":
-        color = 0x2C2F33 # ダークグレー
-    elif quote["faction"] == "スウェーデン王国":
-        color = 0x005293 # スウェーデンブルー
+@bot.tree.command(name="janken", description="国家との戦略的決着（じゃんけん）を行う")
+async def janken(interaction: discord.Interaction):
+    embed = discord.Embed(title="☭ 戦略的選択", description="同志よ、次の一手を選択せよ。", color=THEME_COLOR)
+    await interaction.response.send_message(embed=embed, view=JankenView())
 
-    embed = discord.Embed(title="📜 歴史的記録アーカイブ", color=color)
-    embed.add_field(name="格言", value=f"```\n{quote['text']}\n```", inline=False)
-    embed.add_field(name="発言者", value=f"**{quote['author']}**", inline=True)
-    embed.add_field(name="所属", value=f"{quote['faction']}", inline=True)
-    embed.set_footer(text="歴史から学び、生産に活かせ。")
-
+@bot.tree.command(name="omikuji", description="本日の配給物資を受け取る")
+async def omikuji(interaction: discord.Interaction):
+    fortunes = [
+        {"r": "労働英雄級 (大吉)", "i": "特級ウォッカ", "d": "党は同志を高く評価している！"},
+        {"r": "模範労働者 (中吉)", "i": "追加のジャガイモ", "d": "ノルマ達成おめでとう。"},
+        {"r": "一般的市民 (小吉)", "i": "ビーツのスープ", "d": "平穏こそが最大の幸福である。"},
+        {"r": "要注意人物 (末吉)", "i": "塩のみ", "d": "生産性が低下している。自己批判せよ。"},
+        {"r": "シベリア送り (凶)", "i": "片道切符", "d": "反革命的な態度だ。再教育が必要だ。"}
+    ]
+    f = random.choice(fortunes)
+    embed = discord.Embed(title="☭ 配給結果通報", color=THEME_COLOR)
+    embed.add_field(name="判定", value=f["r"], inline=False)
+    embed.add_field(name="物資", value=f["i"], inline=True)
+    embed.set_footer(text=f["d"])
     await interaction.response.send_message(embed=embed)
 
-# ===== /ranking (貢献度ランキング) =====
-@bot.tree.command(name="ranking", description="国家への貢献度（XP）ランキングを表示する")
+@bot.tree.command(name="meigen", description="歴史的金言を表示する")
+async def meigen(interaction: discord.Interaction):
+    quote = random.choice(QUOTES_ARCHIVE)
+    embed = discord.Embed(title="📜 歴史的記録アーカイブ", color=THEME_COLOR)
+    embed.add_field(name="格言", value=f"```\n{quote['text']}\n```", inline=False)
+    embed.add_field(name="発言者", value=f"**{quote['author']}** ({quote['faction']})")
+    await interaction.response.send_message(embed=embed)
+
+@bot.tree.command(name="ranking", description="貢献度ランキングを表示する")
 async def ranking(interaction: discord.Interaction):
-    # XPでソート
-    sorted_users = sorted(
-        bot.user_data.items(), 
-        key=lambda item: item[1]["xp"], 
-        reverse=True
-    )
-    
-    # 上位10名を表示
-    top_10 = sorted_users[:10]
-    
-    embed = discord.Embed(
-        title="☭ スタハノフ運動 貢献度ランキング",
-        description="最も勤勉な労働者（同志）たちを称える。",
-        color=THEME_COLOR
-    )
-
-    text_list = []
-    for rank, (user_id, data) in enumerate(top_10, 1):
-        xp = data["xp"]
-        
-        # 順位に応じたメダル
-        medal = "🥇" if rank == 1 else "🥈" if rank == 2 else "🥉" if rank == 3 else f"**#{rank}**"
-        
-        # ユーザー名の取得（キャッシュになければID表示）
-        user = interaction.guild.get_member(int(user_id))
-        user_name = user.display_name if user else f"不明な同志 ({user_id})"
-        
-        text_list.append(f"{medal} **{user_name}**: {xp} 貢献ポイント")
-
-    if not text_list:
-        embed.description = "まだ記録されたデータがない。"
-    else:
-        embed.add_field(name="上位の同志", value="\n".join(text_list), inline=False)
-    
-    # 自分の順位を表示
-    my_xp = bot.user_data.get(str(interaction.user.id), {}).get("xp", 0)
-    embed.set_footer(text=f"あなたの貢献度: {my_xp} ポイント")
-
+    sorted_users = sorted(bot.user_data.items(), key=lambda x: x[1]["xp"], reverse=True)[:10]
+    embed = discord.Embed(title="☭ 貢献度ランキング", color=THEME_COLOR)
+    lines = [f"#{i+1} <@{u_id}>: {d['xp']} XP" for i, (u_id, d) in enumerate(sorted_users)]
+    embed.description = "\n".join(lines) if lines else "記録なし"
     await interaction.response.send_message(embed=embed)
 
 # ===== 時報 =====
 @tasks.loop(seconds=60)
 async def time_signal():
-    now_jst = datetime.now(JST)
-    if now_jst.minute == 0:
-        if bot.last_signal_hour != now_jst.hour:
-            await send_time_signal(now_jst.hour)
-            bot.last_signal_hour = now_jst.hour
+    now = datetime.now(JST)
+    if now.minute == 0 and bot.last_signal_hour != now.hour:
+        bot.last_signal_hour = now.hour
+        for guild in bot.guilds:
+            if guild.system_channel:
+                try: await guild.system_channel.send(f"⏰ **定時放送**: {now.hour:02d}:00")
+                except: pass
 
-async def send_time_signal(hour: int):
-    embed = discord.Embed(title="☭ 定時報告", description=f"現在時刻 **{hour:02d}:00**", color=THEME_COLOR)
-    for guild in bot.guilds:
-        channel = guild.system_channel
-        if channel:
-            try:
-                await channel.send(embed=embed)
-            except:
-                pass
-
-# ===== 起動 =====
 bot.run(TOKEN)
