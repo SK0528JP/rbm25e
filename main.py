@@ -16,7 +16,7 @@ intents.messages = True
 
 JST = timezone(timedelta(hours=9))
 
-# ===== Botクラス =====
+# ===== Botクラス ===== 
 class MyBot(commands.Bot):
     async def setup_hook(self):
         try:
