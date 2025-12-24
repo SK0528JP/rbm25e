@@ -202,3 +202,4 @@ async def on_ready():
     print(f"同志 {bot.user}、永続ストレージ同期完了。")
 
 bot.run(TOKEN)
+
