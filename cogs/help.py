@@ -67,8 +67,8 @@ class Help(commands.Cog):
             name="🎲 エンタメ・ギャラリー (Entertainment)",
             value=(
                 "`/roulette [amount]` - 所持金を賭けたルーレット勝負\n"
-                "`/gallery_add [name] [image]` - サーバーの思い出(画像)を保存\n"
-                "`/gallery_view [name]` - 保存された画像を表示"
+                "`/gallery_save [name] [image]` - サーバーの思い出(画像)を保存\n"
+                "`/gallery_load [name]` - 保存された画像を表示"
             ),
             inline=False
         )
