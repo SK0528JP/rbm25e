@@ -9,7 +9,7 @@ TOKEN = os.getenv("DISCORD_BOT_TOKEN")
 GIST_ID = os.getenv("GIST_ID")
 GITHUB_TOKEN = os.getenv("MY_GITHUB_TOKEN")
 # 同志たちのサーバーID（数字で入力）
-GUILD_ID = None  # ← ここをあなたのサーバーIDに！
+GUILD_ID = 1062900513017962576  # ← 【重要】ここにあなたのサーバーIDを入れてください
 
 JST = timezone(timedelta(hours=9), 'JST')
 
@@ -28,8 +28,9 @@ class Rb_m25_Bot(commands.Bot):
         self.ledger = Ledger(GIST_ID, GITHUB_TOKEN) if GIST_ID and GITHUB_TOKEN else None
 
     async def setup_hook(self):
-        print("--- [DEBUG] setup_hook 開始 ---")
+        print("--- [COMMAND RECOVERY INITIATED] ---")
         
+        # 1. すべてのCogを読み込み
         cogs_list = [
             "cogs.status", "cogs.economy", "cogs.admin",
             "cogs.entertainment", "cogs.roulette", "cogs.user",
@@ -43,23 +44,33 @@ class Rb_m25_Bot(commands.Bot):
             except Exception as e:
                 print(f"❌ Failed to load {cog}: {e}")
 
-        # --- 同期処理の最適化 ---
-        try:
-            if GUILD_ID:
-                print(f"🛰️ 同志たちのサーバー ({GUILD_ID}) へ同期を開始...")
+        # 2. 強制同期セクション
+        if GUILD_ID:
+            try:
                 target_guild = discord.Object(id=GUILD_ID)
+                
+                print(f"♻️ Guild {GUILD_ID} のコマンドキャッシュをクリア中...")
+                # 一旦そのサーバーのコマンドを空にする
+                self.tree.clear_commands(guild=target_guild)
+                await self.tree.sync(guild=target_guild)
+                
+                print("🛰️ 最新の全コマンドをサーバーに再同期中...")
+                # グローバル（今読み込んだ全Cogのコマンド）をサーバーにコピー
                 self.tree.copy_global_to(guild=target_guild)
                 await self.tree.sync(guild=target_guild)
-                print("✅ サーバー専用同期 完了")
-            
-            # グローバル同期はレート制限回避のため、必要最低限に
-            # await self.tree.sync() 
-            # print("✅ グローバル同期 完了")
-            
-        except Exception as e:
-            print(f"⚠️ 同期中にエラー発生 (無視して続行): {e}")
+                
+                print("✨ サーバーへの強制同期が完了しました。")
+            except Exception as e:
+                print(f"⚠️ サーバー同期中にエラー (無視して続行): {e}")
 
-        print("--- [DEBUG] setup_hook 終了。ループを開始します ---")
+        # 3. 全体（グローバル）同期も実行
+        try:
+            await self.tree.sync()
+            print("🌎 グローバル同期リクエスト送信完了。")
+        except Exception as e:
+            print(f"⚠️ グローバル同期エラー: {e}")
+
+        print("--- [SETUP HOOK FINISHED] ---")
         self.update_status.start()
 
     @tasks.loop(seconds=10)
@@ -85,7 +96,7 @@ class Rb_m25_Bot(commands.Bot):
                 activity=discord.Activity(type=discord.ActivityType.watching, name=status_text)
             )
         except Exception as e:
-            print(f"❌ status_loop エラー: {e}")
+            print(f"❌ status_loop Error: {e}")
 
 bot = Rb_m25_Bot()
 
@@ -93,6 +104,7 @@ bot = Rb_m25_Bot()
 async def on_ready():
     print(f"--- Rb m/25 System Online ---")
     print(f"Logged in as: {bot.user.name}")
+    print(f"Ready to serve '同志たち' server.")
     print(f"-----------------------------")
 
 @bot.event
@@ -105,7 +117,7 @@ async def on_message(message):
         u["xp"] += 1
         if u["xp"] % 30 == 0:
             bot.ledger.save()
-            print(f"💾 Auto-saved: {message.author.display_name}")
+            print(f"💾 Auto-saved data for {message.author.display_name}")
 
     await bot.process_commands(message)
 
