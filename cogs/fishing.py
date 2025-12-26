@@ -8,7 +8,7 @@ from datetime import datetime
 class Fishing(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        # 獲物リストの拡張（名前, 基本価格, サイズ範囲, レア度, 出現の重み）
+        # 獲物リスト（名前, 基本価格, サイズ範囲, レア度, 出現の重み）
         self.FISH_POOL = [
             # ゴミ (Weights: 20)
             {"name": "長靴", "base_price": 5, "size_range": (20, 30), "rarity": "ゴミ", "weight": 8},
@@ -43,22 +43,15 @@ class Fishing(commands.Cog):
     @app_commands.command(name="fishing", description="釣りをします。")
     async def fishing(self, interaction: discord.Interaction):
         await interaction.response.send_message("🎣 釣り糸を垂らしました。アタリを待っています...")
-        
-        # 演出：ドキドキ感を出すために待機時間をランダムに
         await asyncio.sleep(random.randint(3, 6))
 
-        # 重み付き抽選
         weights = [f["weight"] for f in self.FISH_POOL]
         fish_base = random.choices(self.FISH_POOL, weights=weights, k=1)[0]
 
-        # サイズ計算：範囲内でランダム
         size = round(random.uniform(fish_base["size_range"][0], fish_base["size_range"][1]), 1)
-        
-        # 価格計算：(サイズ / 最小サイズ) で価格が上昇する補正
         size_multiplier = size / fish_base["size_range"][0]
         price = int(fish_base["base_price"] * size_multiplier)
 
-        # データの保存
         user_data = self.bot.ledger.get_user(interaction.user.id)
         if "fishing_inventory" not in user_data:
             user_data["fishing_inventory"] = []
@@ -73,15 +66,14 @@ class Fishing(commands.Cog):
         user_data["fishing_inventory"].append(new_item)
         self.bot.ledger.save()
 
-        # レア度別カラー
         color_map = {
             "ゴミ": discord.Color.dark_gray(),
             "N": discord.Color.blue(),
             "R": discord.Color.green(),
             "SR": discord.Color.purple(),
             "SSR": discord.Color.gold(),
-            "LEGEND": discord.Color.from_rgb(255, 0, 0), # 赤
-            "TREASURE": discord.Color.from_rgb(0, 255, 255) # 水色
+            "LEGEND": discord.Color.from_rgb(255, 0, 0),
+            "TREASURE": discord.Color.from_rgb(0, 255, 255)
         }
         color = color_map.get(fish_base["rarity"], discord.Color.default())
 
@@ -107,11 +99,12 @@ class Fishing(commands.Cog):
 
         embed = discord.Embed(title=f"🪣 {interaction.user.display_name} の生け簀", color=discord.Color.blue())
         desc = ""
-        # ページングなしで最新20件表示
-        for i, item in enumerate(inventory[-20:]): 
-            # インデックス番号は全体の番号を表示
-            actual_idx = len(inventory) - len(inventory[-20:]) + i
-            desc += f"`{actual_idx}`: **{item['name']}** ({item['size']}cm) / {item['price']} cr\n"
+        # 直近20件を表示
+        display_items = inventory[-20:]
+        offset = len(inventory) - len(display_items)
+        
+        for i, item in enumerate(display_items):
+            desc += f"`{offset + i}`: **{item['name']}** ({item['size']}cm) / {item['price']} cr\n"
         
         embed.description = desc
         embed.set_footer(text=f"合計所持数: {len(inventory)} 匹")
@@ -153,28 +146,45 @@ class Fishing(commands.Cog):
         await interaction.response.defer()
         
         all_fish = []
-        for user_id, data in self.bot.ledger.data.items():
+        ledger_data = self.bot.ledger.data
+        
+        for user_id_str, data in ledger_data.items():
             inventory = data.get("fishing_inventory", [])
+            if not inventory:
+                continue
+            
+            try:
+                user_id = int(user_id_str)
+            except ValueError:
+                continue
+
             for item in inventory:
-                item_with_owner = item.copy()
-                item_with_owner["owner_id"] = int(user_id)
-                all_fish.append(item_with_owner)
+                all_fish.append({
+                    "name": item.get("name", "不明"),
+                    "size": item.get("size", 0),
+                    "owner_id": user_id
+                })
 
         if not all_fish:
             await interaction.followup.send("🌊 まだこの海に記録はない...")
             return
 
-        # サイズ順でソート
         all_fish.sort(key=lambda x: x["size"], reverse=True)
 
         embed = discord.Embed(title="🏆 歴代大物ランキング TOP10", color=discord.Color.gold())
         lines = []
+        
         for i, fish in enumerate(all_fish[:10], 1):
-            member = interaction.guild.get_member(fish["owner_id"])
-            name = member.display_name if member else f"ID:{fish['owner_id']}"
+            owner_id = fish["owner_id"]
+            member = interaction.guild.get_member(owner_id)
+            if member:
+                display_name = member.display_name
+            else:
+                user = self.bot.get_user(owner_id)
+                display_name = user.display_name if user else f"ユーザー({owner_id})"
             
             medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"`{i}.`"
-            lines.append(f"{medal} **{name}** - {fish['name']} ({fish['size']} cm)")
+            lines.append(f"{medal} **{display_name}** - {fish['name']} ({fish['size']} cm)")
 
         embed.description = "\n".join(lines)
         await interaction.followup.send(embed=embed)
