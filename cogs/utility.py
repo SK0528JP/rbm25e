@@ -1,110 +1,72 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
-from strings import STRINGS
 
 class Utility(commands.Cog):
     def __init__(self, bot, ledger):
         self.bot = bot
         self.ledger = ledger
 
-    @app_commands.command(name="help", description="System Guide / ヘルプ / Hjälp")
+    @app_commands.command(name="help", description="Rb m/25 の操作ガイドを表示します")
     async def help_command(self, it: discord.Interaction):
-        """システムの使用方法を各言語で表示します。"""
-        u = self.ledger.get_user(it.user.id)
-        lang = u.get("lang", "ja")
-        s = STRINGS.get(lang, STRINGS["ja"])
-
-        # 言語別の恒久的な説明文
-        guides = {
-            "ja": (
-                "## 🌿 Rb m/25 インターフェースガイド\n"
-                "当システムは北欧モダニズムに基づいた多機能・多言語Botです。\n\n"
-                "### 🛠️ 初期設定\n"
-                "- `/lang` : 表示言語を日本語、英語、スウェーデン語から選択します。\n"
-                "- **貢献度(XP)** : チャットに参加することで3秒ごとに蓄積されます。\n\n"
-                "### 📜 主要コマンド\n"
-                "- `/status` : 現在の資産額と貢献度を表示します。\n"
-                "- `/ranking` : コミュニティ内の上位層を確認します。\n"
-                "- `/pay` : 指定したユーザーに資産を送金します。\n"
-                "- `/janken` : 娯楽ユニット。勝利すると資産が増加します。\n\n"
-                "*不明な点がある場合は管理者までお問い合わせください。*"
-            ),
-            "en": (
-                "## 🌿 Rb m/25 Interface Guide\n"
-                "A multi-functional system inspired by Swedish modernism.\n\n"
-                "### 🛠️ Configuration\n"
-                "- `/lang` : Select your preferred language (JP/EN/SV).\n"
-                "- **Experience (XP)** : Earned every 3 seconds by chatting.\n\n"
-                "### 📜 Key Commands\n"
-                "- `/status` : View your current credits and XP.\n"
-                "- `/ranking` : Check the community leaderboards.\n"
-                "- `/pay` : Securely transfer credits to other users.\n"
-                "- `/janken` : Entertainment unit. Win to increase credits.\n\n"
-                "*For further assistance, please contact the administrator.*"
-            ),
-            "sv": (
-                "## 🌿 Rb m/25 Gränssnittsguide\n"
-                "Ett multifunktionellt system inspirerat av svensk modernism.\n\n"
-                "### 🛠️ Konfiguration\n"
-                "- `/lang` : Välj ditt föredragna språk (JP/EN/SV).\n"
-                "- **Erfarenhet (XP)** : Tjänas var tredje sekund genom att chatta.\n\n"
-                "### 📜 Huvudkommandon\n"
-                "- `/status` : Visa dina nuvarande krediter och XP.\n"
-                "- `/ranking` : Kontrollera gemenskapens topplistor.\n"
-                "- `/pay` : Överför krediter säkert till andra användare.\n"
-                "- `/janken` : Underhållningsenhet. Vinn för att öka krediter.\n\n"
-                "*För ytterligare hjälp, kontakta administratören.*"
-            )
-        }
-
+        """
+        システムの使いかたを分かりやすく解説するヘルプコマンドです。
+        """
         embed = discord.Embed(
-            description=guides.get(lang, guides["en"]),
+            title="🌿 Rb m/25 システムガイド",
+            description=(
+                "Rb m/25 は、北欧モダニズムの思想を取り入れた多機能管理システムです。\n"
+                "全てのメッセージは日本語で提供されています。\n\n"
+                "### 💎 資産と貢献度\n"
+                "- **貢献度 (XP)**: チャットで発言するたびに蓄積されます（3秒間隔）。\n"
+                "- **資産 (Credits)**: 初期値 100 cr。ゲームや送金で使用します。\n\n"
+                "### 📜 利用可能なコマンド\n"
+                "- `/status` : 自分の現在の資産とXPを確認します。\n"
+                "- `/ranking` : サーバー内の長者・貢献者ランキングを表示します。\n"
+                "- `/pay` : 他のユーザーに資産を安全に送金します。\n"
+                "- `/janken` : 娯楽ユニット。勝利すると 10 cr 獲得できます。\n"
+                "- `/fortune` : 今日のおみくじを引きます。\n"
+                "- `/ping` : システムの応答速度を測定します。\n\n"
+                "*※ `/lang` コマンドは日本語専用化に伴い廃止されました。*"
+            ),
             color=0x475569 # スレートグレー
         )
-        embed.set_author(name=f"{s['system_name']} | Support", icon_url=self.bot.user.display_avatar.url)
-        embed.set_footer(text=s["footer_infra"])
-
-        # ephemeral=True で実行者本人にのみ表示
+        embed.set_author(name="Rb m/25 インターフェース", icon_url=self.bot.user.display_avatar.url)
+        embed.set_footer(text="Rb m/25 Infrastructure Division")
+        
+        # 本人にのみ表示
         await it.response.send_message(embed=embed, ephemeral=True)
 
-    @app_commands.command(name="status", description="Check profile / プロフィール照会 / Visa profil")
+    @app_commands.command(name="status", description="自分のプロファイルと資産状況を表示します")
     async def status(self, it: discord.Interaction):
-        """ユーザーの資産と貢献度を表示します。"""
+        """
+        ユーザーの現在のステータスを可視化します。
+        """
         u = self.ledger.get_user(it.user.id)
-        lang = u.get("lang", "ja")
-        s = STRINGS.get(lang, STRINGS["ja"])
-
+        
         embed = discord.Embed(color=0xf8fafc)
-        embed.set_author(name=f"{it.user.display_name}", icon_url=it.user.display_avatar.url)
+        embed.set_author(name=f"{it.user.display_name} のステータス", icon_url=it.user.display_avatar.url)
         
-        stats_val = f"💰 **{s['status_credit']}**: {u['money']:,} cr\n✨ **{s['status_xp']}**: {u['xp']:,} XP"
-        embed.add_field(name=s["status_title"], value=stats_val, inline=False)
+        status_info = (
+            f"💰 **保有資産**: {u['money']:,} cr\n"
+            f"✨ **貢献度**: {u['xp']:,} XP\n"
+            f"📅 **登録日**: {u.get('joined_at', '不明')}"
+        )
+        embed.add_field(name="データ照会結果", value=status_info, inline=False)
         
-        embed.set_footer(text=f"{s['footer_infra']} | Active: {u.get('last_active', 'N/A')}")
+        # 最終アクティブ時間の表示
+        last_active = u.get('last_active', '記録なし')
+        embed.set_footer(text=f"最終稼働: {last_active} | Rb m/25")
+        
         await it.response.send_message(embed=embed)
 
-    @app_commands.command(name="lang", description="Set language / 言語設定 / Ställ in språk")
-    @app_commands.choices(language=[
-        app_commands.Choice(name="日本語 (Japanese)", value="ja"),
-        app_commands.Choice(name="English", value="en"),
-        app_commands.Choice(name="Svenska (Swedish)", value="sv"),
-    ])
-    async def set_lang(self, it: discord.Interaction, language: app_commands.Choice[str]):
-        """ユーザーの言語設定を保存します。"""
-        u = self.ledger.get_user(it.user.id)
-        u["lang"] = language.value
-        self.ledger.save()
-        
-        msg = STRINGS[language.value]["lang_updated"]
-        embed = discord.Embed(description=f"✅ {msg}", color=0x88a096)
-        await it.response.send_message(embed=embed, ephemeral=True)
-
-    @app_commands.command(name="ping", description="Check latency / 応答速度 / Latens")
+    @app_commands.command(name="ping", description="システムの応答速度を確認します")
     async def ping(self, it: discord.Interaction):
-        """システムの応答速度を表示します。"""
+        """
+        レイテンシを確認します。
+        """
         latency = round(self.bot.latency * 1000)
-        await it.response.send_message(f"📡 **Latency**: `{latency}ms`", ephemeral=True)
+        await it.response.send_message(f"📡 **システム応答速度**: `{latency}ms`", ephemeral=True)
 
 async def setup(bot):
     from __main__ import ledger_instance
