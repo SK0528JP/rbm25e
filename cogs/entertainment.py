@@ -30,10 +30,9 @@ class JankenView(discord.ui.View):
         
         bot_choice = random.choice(["グー", "チョキ", "パー"])
         
-        # 判定ロジック
         if user_choice == bot_choice:
             result = "引き分けだ。労働に戻れ。"
-            color = 0x808080 # グレー
+            color = 0x808080 
         elif (user_choice == "グー" and bot_choice == "チョキ") or \
              (user_choice == "チョキ" and bot_choice == "パー") or \
              (user_choice == "パー" and bot_choice == "グー"):
@@ -42,10 +41,10 @@ class JankenView(discord.ui.View):
             u["money"] += reward
             self.ledger.save()
             result = f"君の勝ちだ！報奨金として **{reward} 資金** を授与する。"
-            color = 0xffd700 # 金
+            color = 0xffd700 
         else:
             result = "私の勝ちだ。修行が足りんぞ。"
-            color = 0xff0000 # 赤
+            color = 0xff0000 
 
         embed = discord.Embed(title="✊✌️✋ じゃんけん結果報告", color=color)
         embed.add_field(name="同志の選択", value=user_choice, inline=True)
@@ -53,7 +52,6 @@ class JankenView(discord.ui.View):
         embed.add_field(name="最終判定", value=f"**{result}**", inline=False)
         embed.set_footer(text="中央競技委員会 🏆")
         
-        # ボタンを消してEmbedに更新
         await it.response.edit_message(content=None, embed=embed, view=None)
 
 # --- Cog本体 ---
@@ -110,15 +108,35 @@ class Entertainment(commands.Cog):
         embed.set_footer(text="中央決定委員会 ⚖️")
         await it.response.send_message(embed=embed)
 
-    @app_commands.command(name="comment", description="公式声明の発表（画像添付可能）")
-    async def comment(self, it: discord.Interaction, text: str, image: Optional[discord.Attachment] = None):
-        embed = discord.Embed(description=f"### {text}", color=0xff0000)
-        embed.set_author(name="📜 国家公式声明", icon_url=self.bot.user.display_avatar.url)
-        if image:
-            embed.set_image(url=image.url)
-        embed.set_footer(text=f"発信者：{it.user.display_name}")
-        await it.response.send_message(embed=embed)
+    @app_commands.command(name="comment", description="匿名で声明を発表する")
+    @app_commands.describe(
+        text="発表する内容", 
+        image="添付する画像（任意）", 
+        embed_mode="はい：公式声明形式（埋め込み）、いいえ：通常テキスト形式（デフォルト）"
+    )
+    async def comment(
+        self, 
+        it: discord.Interaction, 
+        text: str, 
+        image: Optional[discord.Attachment] = None,
+        embed_mode: bool = False
+    ):
+        # 1. 実行者のみに受理報告（匿名性を守るため）
+        await it.response.send_message("📨 報告：声明を受理した。匿名で配信する。", ephemeral=True)
+
+        # 2. チャンネルに投稿（投稿者はボットになる）
+        if embed_mode:
+            embed = discord.Embed(description=f"### {text}", color=0xff0000)
+            embed.set_author(name="📜 国家公式声明（匿名）", icon_url=self.bot.user.display_avatar.url)
+            if image:
+                embed.set_image(url=image.url)
+            embed.set_footer(text="※この声明は中央匿名化処理を受けています")
+            await it.channel.send(embed=embed)
+        else:
+            content = f"📢 **【匿名声明】**\n{text}"
+            if image:
+                content += f"\n{image.url}"
+            await it.channel.send(content=content)
 
 async def setup(bot):
-    # main.pyで直接クラスを呼ぶため、ここは空で問題ない
     pass
