@@ -38,7 +38,8 @@ class Rb_m25_Bot(commands.Bot):
         cogs_list = [
             "cogs.status", "cogs.economy", "cogs.admin",
             "cogs.entertainment", "cogs.roulette", "cogs.user",
-            "cogs.ping", "cogs.help", "cogs.exchange", "cogs.study"
+            "cogs.ping", "cogs.help",
+"cogs.gallery", "cogs.exchange", "cogs.study"
         ]
         
         for cog in cogs_list:
