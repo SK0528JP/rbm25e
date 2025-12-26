@@ -1,9 +1,9 @@
-name: Discord Bot
+name: Discord Bot (Rb m/25)
 
 on:
   push:
     branches: [ "*" ]
-  workflow_dispatch: # 手動で「Run workflow」ボタンから起動可能
+  workflow_dispatch: # 手動実行ボタンを有効化
   schedule:
     # 3時間おきに実行 (UTC: 0, 3, 6, 9, 12, 15, 18, 21時)
     # 日本時間 (JST): 9, 12, 15, 18, 21, 0, 3, 6時
@@ -13,8 +13,7 @@ jobs:
   run-bot:
     runs-on: ubuntu-latest
     
-    # 次のcron起動（3時間後）と重ならないよう、170分（2時間58分）で強制終了させる
-    # これにより、ボットがゾンビ化して二重起動することを防ぐ
+    # 次のcron起動と重ならないよう、178分で強制終了させてゾンビ化を防ぐ
     timeout-minutes: 178
     
     steps:
@@ -29,11 +28,12 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install discord.py aiohttp requests
+          # Rb m/25 に必要なライブラリを網羅
+          pip install discord.py aiohttp requests python-dotenv
 
       - name: Run bot
         env:
-          # Repository Secretsに登録した各キーをボットに注入
+          # Repository Secretsから環境変数を注入
           DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
           MY_GITHUB_TOKEN: ${{ secrets.MY_GITHUB_TOKEN }}
           GIST_ID: ${{ secrets.GIST_ID }}
