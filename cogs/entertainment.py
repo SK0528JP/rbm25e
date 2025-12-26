@@ -2,76 +2,79 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 import random
-from strings import STRINGS
 
 class Entertainment(commands.Cog):
     def __init__(self, bot, ledger):
         self.bot = bot
         self.ledger = ledger
 
-    @app_commands.command(name="janken", description="Play Rock Paper Scissors / じゃんけん / Sten, Sax, Påse")
-    @app_commands.describe(choice="Your hand / 自分の手 / Din hand")
+    @app_commands.command(name="janken", description="じゃんけんで遊びます（勝利で10cr獲得）")
+    @app_commands.describe(choice="自分の手を選んでください")
     @app_commands.choices(choice=[
-        app_commands.Choice(name="Rock / 👊 / Sten", value="rock"),
-        app_commands.Choice(name="Paper / ✋ / Påse", value="paper"),
-        app_commands.Choice(name="Scissors / ✌️ / Sax", value="scissors"),
+        app_commands.Choice(name="👊 グー", value="rock"),
+        app_commands.Choice(name="✋ パー", value="paper"),
+        app_commands.Choice(name="✌️ チョキ", value="scissors"),
     ])
     async def janken(self, it: discord.Interaction, choice: app_commands.Choice[str]):
-        u = self.ledger.get_user(it.user.id)
-        lang = u.get("lang", "ja")
-        s = STRINGS[lang]
-        
+        # ボットの手を決定
         bot_choice = random.choice(["rock", "paper", "scissors"])
         hands = {
-            "rock": "👊",
-            "paper": "✋",
-            "scissors": "✌️"
+            "rock": "👊 (グー)",
+            "paper": "✋ (パー)",
+            "scissors": "✌️ (チョキ)"
         }
 
-        # 勝敗判定
+        # 勝敗判定ロジック
         if choice.value == bot_choice:
-            result_key = "janken_tie"
-            color = 0x94a3b8
+            result_text = "結果は **あいこ** です。"
+            color = 0x94a3b8 # グレー
+            reward_msg = ""
         elif (choice.value == "rock" and bot_choice == "scissors") or \
              (choice.value == "paper" and bot_choice == "rock") or \
              (choice.value == "scissors" and bot_choice == "paper"):
-            result_key = "janken_win"
-            color = 0x2ecc71
-            # 勝利報酬
+            result_text = "おめでとうございます！ **あなたの勝ち** です！"
+            color = 0x2ecc71 # 緑
+            # 勝利報酬の付与
+            u = self.ledger.get_user(it.user.id)
             u["money"] += 10
             self.ledger.save()
+            reward_msg = "💰 報酬として **10 cr** を付与しました。"
         else:
-            result_key = "janken_lose"
-            color = 0xe74c3c
+            result_text = "残念... **あなたの負け** です。"
+            color = 0xe74c3c # 赤
+            reward_msg = ""
 
-        embed = discord.Embed(title="Rb m/25 Janken Unit", color=color)
-        embed.add_field(name="YOU", value=f"{hands[choice.value]} ({choice.name})", inline=True)
-        embed.add_field(name="BOT", value=f"{hands[bot_choice]}", inline=True)
-        embed.add_field(name="Result", value=f"**{s[result_key]}**", inline=False)
+        embed = discord.Embed(title="Rb m/25 娯楽ユニット | じゃんけん", color=color)
+        embed.add_field(name="あなた", value=hands[choice.value], inline=True)
+        embed.add_field(name="ボット", value=hands[bot_choice], inline=True)
+        embed.add_field(name="判定", value=result_text, inline=False)
         
-        if result_key == "janken_win":
-            embed.set_footer(text="+10 credits awarded.")
-            
+        if reward_msg:
+            embed.set_footer(text=reward_msg)
+        else:
+            embed.set_footer(text="Rb m/25 Entertainment Unit")
+
         await it.response.send_message(embed=embed)
 
-    @app_commands.command(name="fortune", description="Draw a fortune / おみくじ / Dra en lyckosedel")
+    @app_commands.command(name="fortune", description="今日のおみくじを引きます")
     async def fortune(self, it: discord.Interaction):
-        u = self.ledger.get_user(it.user.id)
-        lang = u.get("lang", "ja")
-        s = STRINGS[lang]
-
-        # 言語別の結果リスト (strings.pyに定義がない場合を想定して直接定義)
-        results = {
-            "ja": ["大吉", "中吉", "小吉", "吉", "末吉", "凶"],
-            "en": ["Great Blessing", "Middle Blessing", "Small Blessing", "Blessing", "Future Blessing", "Curse"],
-            "sv": ["Stor Välsignelse", "Mellan Välsignelse", "Liten Välsignelse", "Välsignelse", "Framtida Välsignelse", "Förbannelse"]
-        }
+        # おみくじの結果リスト
+        results = [
+            "✨ 大吉 (超幸運)", 
+            "🍃 中吉", 
+            "🌱 小吉", 
+            "☀ 吉", 
+            "☁ 末吉", 
+            "👣 凶"
+        ]
+        res = random.choice(results)
         
-        res = random.choice(results.get(lang, results["en"]))
-        
-        embed = discord.Embed(title="Rb m/25 Fortune Unit", color=0x6366f1)
-        embed.description = f"✨ {s['fortune_result']}: **{res}**"
-        embed.set_footer(text=s["footer_admin"])
+        embed = discord.Embed(
+            title="Rb m/25 娯楽ユニット | おみくじ", 
+            description=f"今日の結果は... **{res}** です！",
+            color=0x6366f1
+        )
+        embed.set_footer(text="Rb m/25 Entertainment Unit")
         
         await it.response.send_message(embed=embed)
 
