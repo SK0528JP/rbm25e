@@ -9,35 +9,36 @@ class Fishing(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         # 獲物リスト（名前, 基本価格, サイズ範囲, レア度, 出現の重み）
+        # 全体的に価格を抑え、レアリティの重みを厳しく調整
         self.FISH_POOL = [
-            # ゴミ (Weights: 20)
-            {"name": "長靴", "base_price": 5, "size_range": (20, 30), "rarity": "ゴミ", "weight": 8},
-            {"name": "空き缶", "base_price": 1, "size_range": (5, 10), "rarity": "ゴミ", "weight": 8},
-            {"name": "ビニール袋", "base_price": 2, "size_range": (30, 50), "rarity": "ゴミ", "weight": 4},
+            # ゴミ (Weights: 25) - ほぼ換金価値なし
+            {"name": "長靴", "base_price": 2, "size_range": (20, 30), "rarity": "ゴミ", "weight": 10},
+            {"name": "空き缶", "base_price": 1, "size_range": (5, 10), "rarity": "ゴミ", "weight": 10},
+            {"name": "ビニール袋", "base_price": 1, "size_range": (30, 50), "rarity": "ゴミ", "weight": 5},
 
-            # 一般 (Weights: 60)
-            {"name": "アジ", "base_price": 50, "size_range": (15, 30), "rarity": "N", "weight": 15},
-            {"name": "イワシ", "base_price": 30, "size_range": (10, 25), "rarity": "N", "weight": 15},
-            {"name": "サバ", "base_price": 60, "size_range": (25, 45), "rarity": "N", "weight": 10},
-            {"name": "キス", "base_price": 40, "size_range": (10, 25), "rarity": "N", "weight": 10},
-            {"name": "メバル", "base_price": 70, "size_range": (15, 35), "rarity": "N", "weight": 10},
+            # 一般 (Weights: 60) - メインの収入源
+            {"name": "アジ", "base_price": 15, "size_range": (15, 30), "rarity": "N", "weight": 15},
+            {"name": "イワシ", "base_price": 10, "size_range": (10, 25), "rarity": "N", "weight": 15},
+            {"name": "サバ", "base_price": 25, "size_range": (25, 45), "rarity": "N", "weight": 10},
+            {"name": "キス", "base_price": 12, "size_range": (10, 25), "rarity": "N", "weight": 10},
+            {"name": "メバル", "base_price": 20, "size_range": (15, 35), "rarity": "N", "weight": 10},
 
-            # レア (Weights: 15)
-            {"name": "マダイ", "base_price": 300, "size_range": (30, 90), "rarity": "R", "weight": 5},
-            {"name": "クロダイ", "base_price": 250, "size_range": (30, 60), "rarity": "R", "weight": 5},
-            {"name": "スズキ", "base_price": 400, "size_range": (50, 100), "rarity": "R", "weight": 3},
-            {"name": "アオリイカ", "base_price": 350, "size_range": (20, 50), "rarity": "R", "weight": 2},
+            # レア (Weights: 12) - ちょっと嬉しい
+            {"name": "マダイ", "base_price": 80, "size_range": (30, 90), "rarity": "R", "weight": 4},
+            {"name": "クロダイ", "base_price": 70, "size_range": (30, 60), "rarity": "R", "weight": 4},
+            {"name": "スズキ", "base_price": 100, "size_range": (50, 100), "rarity": "R", "weight": 3},
+            {"name": "アオリイカ", "base_price": 90, "size_range": (20, 50), "rarity": "R", "weight": 1},
 
-            # スーパーレア (Weights: 4)
-            {"name": "ブリ", "base_price": 1200, "size_range": (80, 120), "rarity": "SR", "weight": 1.5},
-            {"name": "ホンマグロ", "base_price": 2500, "size_range": (150, 300), "rarity": "SR", "weight": 1.5},
-            {"name": "クエ", "base_price": 3000, "size_range": (60, 130), "rarity": "SR", "weight": 1.0},
+            # スーパーレア (Weights: 2.5) - 誇れる釣果
+            {"name": "ブリ", "base_price": 350, "size_range": (80, 120), "rarity": "SR", "weight": 1.0},
+            {"name": "ホンマグロ", "base_price": 600, "size_range": (150, 300), "rarity": "SR", "weight": 1.0},
+            {"name": "クエ", "base_price": 800, "size_range": (60, 130), "rarity": "SR", "weight": 0.5},
 
-            # ウルトラレア・伝説 (Weights: 1)
-            {"name": "リュウグウノツカイ", "base_price": 8000, "size_range": (300, 700), "rarity": "SSR", "weight": 0.5},
-            {"name": "黄金のシャチ", "base_price": 15000, "size_range": (500, 800), "rarity": "SSR", "weight": 0.3},
-            {"name": "ポセイドンの三叉槍", "base_price": 50000, "size_range": (200, 210), "rarity": "LEGEND", "weight": 0.1},
-            {"name": "古びた宝箱", "base_price": 20000, "size_range": (50, 60), "rarity": "TREASURE", "weight": 0.1},
+            # ウルトラレア・伝説 (Weights: 0.5) - サーバーの英雄レベル
+            {"name": "リュウグウノツカイ", "base_price": 2500, "size_range": (300, 700), "rarity": "SSR", "weight": 0.2},
+            {"name": "黄金のシャチ", "base_price": 5000, "size_range": (500, 800), "rarity": "SSR", "weight": 0.2},
+            {"name": "ポセイドンの三叉槍", "base_price": 12000, "size_range": (200, 210), "rarity": "LEGEND", "weight": 0.05},
+            {"name": "古びた宝箱", "base_price": 8000, "size_range": (50, 60), "rarity": "TREASURE", "weight": 0.05},
         ]
 
     @app_commands.command(name="fishing", description="釣りをします。")
@@ -99,7 +100,6 @@ class Fishing(commands.Cog):
 
         embed = discord.Embed(title=f"🪣 {interaction.user.display_name} の生け簀", color=discord.Color.blue())
         desc = ""
-        # 直近20件を表示
         display_items = inventory[-20:]
         offset = len(inventory) - len(display_items)
         
