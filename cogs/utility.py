@@ -8,59 +8,55 @@ class Utility(commands.Cog):
         self.bot = bot
         self.ledger = ledger
 
-    @app_commands.command(name="ping", description="システムの接続状況を確認します。")
+    @app_commands.command(name="ping", description="システムの応答速度を確認します。")
     async def ping(self, it: discord.Interaction):
         latency = round(self.bot.latency * 1000)
-        embed = discord.Embed(
-            title="System Status",
-            description="ネットワーク接続は良好です。",
-            color=0x88a096 # セージグリーン
-        )
-        embed.add_field(name="Latency", value=f"`{latency}ms`", inline=True)
-        embed.add_field(name="Stability", value="Healthy", inline=True)
-        embed.set_footer(text="Network Infrastructure Unit")
+        # 状態によって色を微調整（UX: 視覚的フィードバック）
+        status_color = 0x88a096 if latency < 150 else 0xe67e22
+        
+        embed = discord.Embed(title="System Latency", color=status_color)
+        embed.description = f"📡 **Connection is stable.**\n応答速度: `{latency}ms`"
         await it.response.send_message(embed=embed)
 
-    @app_commands.command(name="status", description="自身のユーザー情報を表示します。")
+    @app_commands.command(name="status", description="自身のステータスを照会します。")
     async def status(self, it: discord.Interaction):
         u = self.ledger.get_user(it.user.id)
-        embed = discord.Embed(title="User Profile", color=0x94a3b8) # スレートブルー
-        embed.set_thumbnail(url=it.user.display_avatar.url)
+        embed = discord.Embed(color=0xf8fafc) # 極めて薄いグレー（クリーンな背景）
+        embed.set_author(name=f"{it.user.display_name} - Profile", icon_url=it.user.display_avatar.url)
         
-        # 情報をシンプルに整列
-        embed.add_field(name="Account", value=it.user.display_name, inline=True)
-        embed.add_field(name="Credit", value=f"{u['money']:,} 資金", inline=True)
-        embed.add_field(name="Experience", value=f"{u['xp']:,} XP", inline=True)
+        # 資産状況を一つの大きなフィールドに集約（UX: 読みやすさ重視）
+        embed.add_field(
+            name="📊 Financial Status", 
+            value=f"```💰 資産: {u['money']:,} 資金\n✨ 貢献: {u['xp']:,} XP```", 
+            inline=False
+        )
         
-        embed.set_footer(text=f"Last Active: {u.get('last_active', 'N/A')}")
-        await it.response.send_message(embed=embed)
-
-    @app_commands.command(name="user", description="指定したユーザーの情報を照会します。")
-    async def user_info(self, it: discord.Interaction, target: Optional[discord.Member] = None):
-        t = target if isinstance(target, discord.Member) else it.user
-        u = self.ledger.get_user(t.id)
+        # 補足情報を横並び（UX: 画面スペースの節約）
+        embed.add_field(name="📅 Join Date", value=f"`{u.get('joined_at', 'N/A')}`", inline=True)
+        embed.add_field(name="🕒 Active", value=f"`{u.get('last_active', 'N/A')}`", inline=True)
         
-        embed = discord.Embed(title="Member Information", color=0x475569) # スレートグレー
-        embed.set_thumbnail(url=t.display_avatar.url)
-        
-        embed.add_field(name="Display Name", value=t.display_name, inline=True)
-        embed.add_field(name="Total XP", value=f"{u['xp']:,}", inline=True)
-        embed.add_field(name="Asset Balance", value=f"{u['money']:,}", inline=True)
-        
-        embed.set_footer(text="Registry Search Result")
         await it.response.send_message(embed=embed)
 
     @app_commands.command(name="help", description="操作ガイドを表示します。")
     async def help_command(self, it: discord.Interaction):
         embed = discord.Embed(
-            title="System Guide",
-            description="各セクションで利用可能な機能の一覧です。",
-            color=0x2c3e50
+            title="System Interface Guide",
+            description="各モジュールの機能一覧です。詳細はスラッシュコマンドを入力して確認してください。",
+            color=0x475569
         )
-        embed.add_field(name="Utility", value="`/status` `/user` `/ping`", inline=False)
-        embed.add_field(name="Economy", value="`/pay` `/exchange` `/ranking` `/money_ranking`", inline=False)
-        embed.add_field(name="Communication", value="`/janken` `/omikuji` `/meigen` `/roulette` `/comment`", inline=False)
-        embed.add_field(name="Admin", value="`/admin_grant` `/admin_confiscate` `/restart`", inline=False)
         
-        embed.set_footer(text="Support Documentation")
+        # カテゴリごとに整理（UX: 構造化された情報）
+        categories = {
+            "🔍 Information": "`/status` `/user` `/ping`",
+            "💳 Finance": "`/pay` `/exchange` `/ranking` `/money_ranking`",
+            "💬 Interaction": "`/janken` `/omikuji` `/meigen` `/roulette` `/comment`",
+            "⚙️ Management": "`/admin_grant` `/admin_confiscate` `/restart`"
+        }
+        
+        for name, cmds in categories.items():
+            embed.add_field(name=name, value=cmds, inline=True)
+            
+        embed.set_footer(text="Settings > Command Help")
         await it.response.send_message(embed=embed, ephemeral=True)
+
+async def setup(bot): pass
