@@ -7,15 +7,15 @@ class Economy(commands.Cog):
         self.bot = bot
         self.ledger = ledger
 
-    @app_commands.command(name="pay", description="指定したユーザーへ資金を送金（振込）します。")
+    @app_commands.command(name="pay", description="指定したユーザーへ資金を送金します。")
     async def pay(self, it: discord.Interaction, recipient: discord.Member, amount: int):
         if amount <= 0:
-            await it.response.send_message("エラー：送金金額は1以上に設定してください。", ephemeral=True)
+            await it.response.send_message("1以上の数値を入力してください。", ephemeral=True)
             return
 
         sender_data = self.ledger.get_user(it.user.id)
         if sender_data["money"] < amount:
-            await it.response.send_message(f"エラー：残高が不足しています。（現在残高：{sender_data['money']:,}）", ephemeral=True)
+            await it.response.send_message(f"残高が不足しています。（現在：{sender_data['money']:,}）", ephemeral=True)
             return
 
         recipient_data = self.ledger.get_user(recipient.id)
@@ -23,30 +23,30 @@ class Economy(commands.Cog):
         recipient_data["money"] += amount
         self.ledger.save()
 
-        embed = discord.Embed(title="資金振込完了", color=0x2ecc71)
-        embed.description = f"対象アカウントへの送金処理が正常に終了しました。"
-        embed.add_field(name="振込元", value=it.user.display_name, inline=True)
-        embed.add_field(name="振込先", value=recipient.display_name, inline=True)
-        embed.add_field(name="決済金額", value=f"{amount:,.0f} 資金", inline=False)
-        embed.set_footer(text="Transaction Management Service")
+        embed = discord.Embed(title="Transaction Completed", color=0x88a096) # セージグリーン
+        embed.description = "送金処理が正常に完了いたしました。"
+        embed.add_field(name="Sender", value=it.user.display_name, inline=True)
+        embed.add_field(name="Recipient", value=recipient.display_name, inline=True)
+        embed.add_field(name="Amount", value=f"{amount:,} 資金", inline=False)
+        embed.set_footer(text="Nordic Financial Ledger")
         await it.response.send_message(embed=embed)
 
-    @app_commands.command(name="exchange", description="蓄積された貢献度(XP)を資金に換算します。")
+    @app_commands.command(name="exchange", description="蓄積されたXPを資金に換算します。")
     async def exchange(self, it: discord.Interaction, amount: int):
         u = self.ledger.get_user(it.user.id)
         if amount <= 0 or u["xp"] < amount:
-            await it.response.send_message("エラー：換算可能なXPが不足しているか、数値が不正です。", ephemeral=True)
+            await it.response.send_message("XPが不足しているか、数値が正しくありません。", ephemeral=True)
             return
 
         u["xp"] -= amount
         u["money"] += amount
         self.ledger.save()
 
-        embed = discord.Embed(title="資産換算処理完了", color=0x3498db)
-        embed.description = f"保有資産の振り替えが完了しました。"
-        embed.add_field(name="換算したXP", value=f"{amount:,} XP", inline=True)
-        embed.add_field(name="加算された資金", value=f"{amount:,} 資金", inline=True)
-        embed.set_footer(text="Asset Conversion Module")
+        embed = discord.Embed(title="Asset Conversion", color=0x94a3b8) # スレートブルー
+        embed.description = "資産の振り替えが完了いたしました。"
+        embed.add_field(name="Converted XP", value=f"{amount:,} XP", inline=True)
+        embed.add_field(name="Total Credit", value=f"{amount:,} 資金", inline=True)
+        embed.set_footer(text="Asset Management Unit")
         await it.response.send_message(embed=embed)
 
     @app_commands.command(name="ranking", description="貢献度（XP）の上位10名を表示します。")
@@ -55,29 +55,27 @@ class Economy(commands.Cog):
         sorted_users = sorted(all_users.items(), key=lambda x: x[1].get("xp", 0), reverse=True)[:10]
 
         embed = discord.Embed(
-            title="📊 貢献度（XP）ランキング",
-            description="現在のシステム内におけるアクティブ・スコア上位者です。",
-            color=0x34495e
+            title="Contribution Ranking",
+            description="現在のコミュニティにおける貢献度上位者です。",
+            color=0x475569 # スレートグレー
         )
         
         if not sorted_users:
-            embed.description = "現在、集計対象データが存在しません。"
+            embed.description = "データが見つかりませんでした。"
         else:
             for i, (uid, stats) in enumerate(sorted_users, 1):
-                # ユーザーオブジェクトの取得を試行
-                user = it.guild.get_member(int(uid))
-                name = user.display_name if user else f"ID: {uid}"
+                # IDから名前を取得（キャッシュを利用）
+                member = it.guild.get_member(int(uid))
+                user_name = member.display_name if member else f"User_{uid[:4]}"
                 
-                # 順位に応じたインジケータ（上位3名は強調）
-                rank_label = f"【第{i}位】" if i <= 3 else f"Rank {i}"
-                
+                # 北欧風にシンプルなラベルと強調
                 embed.add_field(
-                    name=rank_label,
-                    value=f"**{name}**\n`{stats['xp']:,} XP`",
+                    name=f"No. {i:02d}",
+                    value=f"**{user_name}**\n{stats['xp']:,} XP",
                     inline=True
                 )
 
-        embed.set_footer(text="System Analytics: Contribution Data")
+        embed.set_footer(text="Performance Analytics")
         await it.response.send_message(embed=embed)
 
     @app_commands.command(name="money_ranking", description="資産保有量の上位10名を表示します。")
@@ -86,27 +84,25 @@ class Economy(commands.Cog):
         sorted_users = sorted(all_users.items(), key=lambda x: x[1].get("money", 0), reverse=True)[:10]
 
         embed = discord.Embed(
-            title="📈 資産保有量ランキング",
-            description="現在のシステム内における総資産額の上位者です。",
-            color=0x27ae60
+            title="Wealth Ranking",
+            description="現在のコミュニティにおける資産保有量上位者です。",
+            color=0x5c7a67 # モスグリーン
         )
         
         if not sorted_users:
-            embed.description = "現在、集計対象データが存在しません。"
+            embed.description = "データが見つかりませんでした。"
         else:
             for i, (uid, stats) in enumerate(sorted_users, 1):
-                user = it.guild.get_member(int(uid))
-                name = user.display_name if user else f"ID: {uid}"
-                
-                rank_label = f"【第{i}位】" if i <= 3 else f"Rank {i}"
+                member = it.guild.get_member(int(uid))
+                user_name = member.display_name if member else f"User_{uid[:4]}"
                 
                 embed.add_field(
-                    name=rank_label,
-                    value=f"**{name}**\n`{stats['money']:,} 資金`",
+                    name=f"No. {i:02d}",
+                    value=f"**{user_name}**\n{stats['money']:,} 資金",
                     inline=True
                 )
 
-        embed.set_footer(text="System Analytics: Asset Data")
+        embed.set_footer(text="Wealth Statistics")
         await it.response.send_message(embed=embed)
 
 async def setup(bot):
