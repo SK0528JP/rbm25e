@@ -7,30 +7,33 @@ class User(commands.Cog):
         self.bot = bot
         self.ledger = ledger
 
-    @app_commands.command(name="user", description="ユーザーのプロファイルを表示します (ID検索対応)")
+    @app_commands.command(name="user", description="ユーザーの全公開情報を最大限に調査・表示します")
     @app_commands.describe(target="ユーザーのメンション、またはユーザーIDを入力してください")
     async def user_info(self, it: discord.Interaction, target: str = None):
         """
-        指定したユーザーの情報を表示。
-        targetが未入力なら自分、IDならそのユーザーを検索。
+        指定したユーザーの公開情報を限界まで取得し、詳細なプロファイルを作成します。
         """
-        await it.response.defer() # 外部検索に時間がかかる場合があるので「考え中」にする
+        await it.response.defer()
 
         user_obj = None
+        is_member = False
 
         # 1. ターゲットの特定
         if target is None:
             user_obj = it.user
+            is_member = True
         else:
-            # メンションからID数字だけを抽出
-            clean_id = target.replace("<@", "").replace(">", "").replace("!", "")
-            
+            clean_id = target.replace("<@", "").replace(">", "").replace("!", "").replace("&", "")
             if clean_id.isdigit():
                 try:
-                    # まずキャッシュ(サーバー内)から探す
-                    user_obj = it.guild.get_member(int(clean_id)) if it.guild else None
-                    # いなければDiscord全体から取得(fetch)
-                    if user_obj is None:
+                    # サーバー内メンバーとして取得試行
+                    if it.guild:
+                        user_obj = it.guild.get_member(int(clean_id))
+                    
+                    if user_obj:
+                        is_member = True
+                    else:
+                        # サーバー外のユーザーをAPIから直接取得
                         user_obj = await self.bot.fetch_user(int(clean_id))
                 except Exception:
                     user_obj = None
@@ -39,45 +42,65 @@ class User(commands.Cog):
                 return
 
         if user_obj is None:
-            await it.followup.send("❌ ユーザーが見つかりませんでした。IDが正しいか確認してください。", ephemeral=True)
+            await it.followup.send("❌ ユーザーを特定できませんでした。IDが正しいか確認してください。", ephemeral=True)
             return
 
-        # 2. データの取得
-        u = self.ledger.get_user(user_obj.id)
+        # 2. データの収集
+        u_data = self.ledger.get_user(user_obj.id)
+        avatar_url = user_obj.display_avatar.url
         
-        # 3. Embedの作成
-        embed = discord.Embed(
-            title=f"👤 ユーザープロファイル",
-            description=f"**{user_obj.name}** のシステム登録情報です。",
-            color=0x94a3b8
-        )
-        
-        # アバター画像のセット（プロフィール画像）
-        if user_obj.display_avatar:
-            embed.set_thumbnail(url=user_obj.display_avatar.url)
-            # 大きな画像として見せたい場合はこちら
-            # embed.set_image(url=user_obj.display_avatar.url)
+        # 色の設定（メンバーなら最高位ロールの色、そうでなければデフォルト）
+        color = user_obj.color if is_member else 0x94a3b8
 
-        # 基本情報
-        info = (
-            f"**表示名**: {user_obj.display_name}\n"
-            f"**ユーザーID**: `{user_obj.id}`\n"
-            f"**アカウント作成日**: {user_obj.created_at.strftime('%Y-%m-%d')}"
+        embed = discord.Embed(title=f"🔍 ユーザー精密調査レポート", color=color)
+        embed.set_thumbnail(url=avatar_url)
+        
+        # プロフィール画像をタップで拡大できるようにリンクを貼る
+        embed.description = f"**[{user_obj.name}#{user_obj.discriminator}]( {avatar_url} )** のプロファイル"
+
+        # --- フィールド1: アカウント基本情報 ---
+        creation_time = f"<t:{int(user_obj.created_at.timestamp())}:D> (<t:{int(user_obj.created_at.timestamp())}:R>)"
+        basic_info = (
+            f"**ID**: `{user_obj.id}`\n"
+            f"**タイプ**: {'🤖 ボット' if user_obj.bot else '👤 ユーザー'}\n"
+            f"**アカウント作成**: {creation_time}"
         )
-        embed.add_field(name="基本データ", value=info, inline=False)
-        
-        # システムデータ（Ledgerから）
-        stats = (
-            f"💰 **保有資産**: {u.get('money', 0):,} cr\n"
-            f"✨ **貢献度 (XP)**: {u.get('xp', 0):,} XP\n"
-            f"📅 **システム登録**: {u.get('joined_at', '記録なし')}"
+        embed.add_field(name="📌 基本データ", value=basic_info, inline=False)
+
+        # --- フィールド2: サーバー内情報 (メンバーの場合のみ) ---
+        if is_member:
+            join_time = f"<t:{int(user_obj.joined_at.timestamp())}:D> (<t:{int(user_obj.joined_at.timestamp())}:R>)"
+            roles = [role.mention for role in reversed(user_obj.roles) if role.name != "@everyone"]
+            role_str = " ".join(roles[:10]) + ("..." if len(roles) > 10 else "")
+            
+            member_info = (
+                f"**ニックネーム**: {user_obj.nick if user_obj.nick else 'なし'}\n"
+                f"**サーバー参加**: {join_time}\n"
+                f"**主要ロール**: {role_str if role_str else 'なし'}"
+            )
+            embed.add_field(name="🏠 サーバー内ステータス", value=member_info, inline=False)
+
+        # --- フィールド3: Rb m/25 システムデータ ---
+        sys_info = (
+            f"💰 **保有資産**: {u_data.get('money', 0):,} cr\n"
+            f"✨ **貢献度 (XP)**: {u_data.get('xp', 0):,} XP\n"
+            f"📅 **システム登録**: `{u_data.get('joined_at', '記録なし')}`"
         )
-        embed.add_field(name="Rb m/25 システムデータ", value=stats, inline=False)
+        embed.add_field(name="💎 Rb m/25 内部データ", value=sys_info, inline=False)
+
+        # --- フッター: 特権情報 ---
+        badges = []
+        if user_obj.public_flags.staff: badges.append("Discord Staff")
+        if user_obj.public_flags.partner: badges.append("Partner")
+        if user_obj.public_flags.hypesquad: badges.append("HypeSquad Events")
+        # 他にも多数ありますが、主要なものを判定可能
         
-        # 管理者判定（あなたのID）
-        is_admin = "✅ 管理権限あり" if user_obj.id == 840821281838202880 else "👤 一般ユーザー"
-        embed.set_footer(text=f"権igen区分: {is_admin} | Rb m/25 Infrastructure")
+        footer_text = f"権限区分: {'✅ システム管理者' if user_obj.id == 840821281838202880 else '👤 一般ユーザー'}"
+        if badges:
+            footer_text += f" | Badges: {', '.join(badges)}"
         
+        embed.set_footer(text=footer_text)
+
         await it.followup.send(embed=embed)
 
 async def setup(bot):
