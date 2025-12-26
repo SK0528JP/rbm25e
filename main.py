@@ -1,12 +1,11 @@
 import discord
 from discord.ext import commands
 import os
-import asyncio
 from ledger import Ledger
 
-# 1. システム・データ・レジャーの初期化
-# 各ユーザーの言語設定(lang)やXP、資産を管理します
-ledger = Ledger()
+# 1. データの初期化（最優先）
+# ここでインスタンス化し、各Cogへ「手渡し」します
+ledger_instance = Ledger()
 
 class Rbm25Bot(commands.Bot):
     def __init__(self):
@@ -14,8 +13,6 @@ class Rbm25Bot(commands.Bot):
         intents.message_content = True
         intents.members = True
         
-        # システム・アイデンティティの設定
-        # ステータスを「退席中(idle)」に、アクティビティを監視モードに設定
         super().__init__(
             command_prefix="!", 
             intents=intents,
@@ -28,10 +25,9 @@ class Rbm25Bot(commands.Bot):
 
     async def setup_hook(self):
         """
-        システムの拡張モジュール（Cogs）をロードし、
-        スラッシュコマンドをグローバルに同期します。
+        モジュールのロードとコマンド同期。
         """
-        # ロード対象のモジュール定義
+        # ロード対象のリスト
         cogs_list = [
             "cogs.utility",
             "cogs.economy",
@@ -41,55 +37,45 @@ class Rbm25Bot(commands.Bot):
 
         for extension in cogs_list:
             try:
-                # 各Cogにledgerインスタンスを渡して初期化
-                # 各Cog内で user_data["lang"] を参照することで多言語化を実現します
+                # 重要：extensionをロードする際、setup関数が呼ばれます
                 await self.load_extension(extension)
                 print(f"[SYSTEM] Module loaded: {extension}")
             except Exception as e:
+                # ここでエラーが出ている場合、ターミナルに表示されます
                 print(f"[ERROR] Failed to load module {extension}: {e}")
 
-        # スラッシュコマンドの同期（Discord側への反映）
+        # スラッシュコマンドをDiscordサーバーへ送信
         await self.tree.sync()
         print("[SYSTEM] Global command synchronization completed.")
 
 bot = Rbm25Bot()
 
-# --- アクティブ・ログ：貢献度(XP)蓄積ユニット ---
-last_xp_time = {}
+# --- 各Cogが利用するためのledger参照用関数（循環インポート防止） ---
+# Cog側で from main import ledger とせず、このインスタンスを setup で渡します
 
-@bot.event
-async def on_message(message):
-    if message.author.bot:
-        return
-
-    now = discord.utils.utcnow()
-    uid = message.author.id
-    
-    # スパム防止：3秒のクールタイムを設けて貢献度(XP)を付与
-    if uid not in last_xp_time or (now - last_xp_time[uid]).total_seconds() > 3:
-        # ledger.py内で lang フィールドの自動補完も行われます
-        ledger.add_xp(uid, 2)
-        ledger.save()
-        last_xp_time[uid] = now
-
-    # プレフィックスコマンド（!）の処理を継続
-    await bot.process_commands(message)
-
-# --- 起動シーケンス・ログ ---
 @bot.event
 async def on_ready():
     print("--------------------------------------------------")
     print(f"  Rb m/25 | Swedish Modern System Interface")
     print(f"  Status: Operational as {bot.user.name}")
-    print(f"  Internal ID: {bot.user.id}")
     print("--------------------------------------------------")
-    print("[LOG] Monitoring communication channels...")
 
-# 5. システム起動
+# XP付与ロジック
+last_xp_time = {}
+@bot.event
+async def on_message(message):
+    if message.author.bot: return
+    now = discord.utils.utcnow()
+    uid = message.author.id
+    if uid not in last_xp_time or (now - last_xp_time[uid]).total_seconds() > 3:
+        ledger_instance.add_xp(uid, 2)
+        ledger_instance.save()
+        last_xp_time[uid] = now
+    await bot.process_commands(message)
+
 if __name__ == "__main__":
-    # 環境変数からトークンを取得
     token = os.getenv("DISCORD_BOT_TOKEN")
     if token:
         bot.run(token)
     else:
-        print("[CRITICAL] Token not found. System initiation aborted.")
+        print("[CRITICAL] Token not found.")
