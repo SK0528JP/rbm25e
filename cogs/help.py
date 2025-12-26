@@ -1,72 +1,76 @@
 import discord
-from discord.ext import commands
 from discord import app_commands
+from discord.ext import commands
 
 class Help(commands.Cog):
-    def __init__(self, bot, ledger):
+    def __init__(self, bot):
         self.bot = bot
-        self.ledger = ledger
 
-    @app_commands.command(name="help", description="Rb m/25 の全コマンドと操作ガイドを表示します")
-    async def help_command(self, it: discord.Interaction):
-        """
-        システムの全体像と、各専門モジュールの役割を詳細に案内します。
-        """
+    @app_commands.command(name="help", description="Rb m/25 のすべてのコマンドを確認します")
+    async def help(self, it: discord.Interaction):
         embed = discord.Embed(
-            title="🌿 Rb m/25 System Manual",
-            description=(
-                "Rb m/25 は複数の専門ユニットで構成されたインフラシステムです。\n"
-                "以下に現在稼働中の主要コマンドを一覧表示します。"
-            ),
-            color=0x475569
+            title="📖 Rb m/25 命令体系マニュアル",
+            description="各セクションのコマンド詳細は以下の通りです。",
+            color=0x3498db
         )
 
-        # 👤 User & Status
+        # --- 経済 & ランキング ---
         embed.add_field(
-            name="👤 User & Status",
-            value="`/status` : 自分の資産・貢献度をクイック照会\n`/user` : IDやメンションから全公開情報を精密調査",
-            inline=False
-        )
-        
-        # 💎 Economy & Exchange (ここを更新)
-        embed.add_field(
-            name="💎 Economy & Exchange",
+            name="💰 経済・ランキング (Finance & Ranking)",
             value=(
-                "`/pay` : 他のユーザーへ資産を安全に送金\n"
-                "`/ranking` : 資産・貢献度のサーバー内順位を表示\n"
-                "`/exchange` : **[NEW]** 貯めたXPを資産(cr)に換金"
+                "`/balance` - 現在の所持金(cr)とXPを確認\n"
+                "`/pay [user] [amount]` - 資産を他の同志に送金\n"
+                "`/ranking [category]` - 資産/XP/釣り/学習のランキングを表示"
             ),
             inline=False
         )
-        
-        # 🎡 Entertainment & Game
+
+        # --- 学習管理 ---
         embed.add_field(
-            name="🎡 Entertainment & Game",
-            value="`/roulette` : 公平な抽選の実行\n`/janken` : じゃんけん勝負（報酬あり）\n`/fortune` : 本日の運勢診断",
-            inline=False
-        )
-        
-        # 🛰️ Infrastructure
-        embed.add_field(
-            name="🛰️ Infrastructure",
-            value="`/ping` : ネットワーク品質とAPI応答速度の診断\n`/help` : このシステムマニュアルを表示",
+            name="📚 学習管理 (Study Management)",
+            value=(
+                "`/study_start` - 学習セッションを開始\n"
+                "`/study_end` - 学習を終了し、報酬(cr/xp)を獲得\n"
+                "`/study_stats` - 自分の累計・今日の学習時間を確認"
+            ),
             inline=False
         )
 
-        # 管理者向け情報
-        if it.user.id == 840821281838202880:
-            embed.add_field(
-                name="🔑 Administrator Only",
-                value="`/admin_grant` : 資産付与\n`/admin_confiscate` : 資産没収\n`/restart` : システム再起動",
-                inline=False
-            )
+        # --- フィッシング ---
+        embed.add_field(
+            name="🎣 フィッシング (Fishing)",
+            value=(
+                "`/fishing` - 釣りを行う（待機時間あり）\n"
+                "`/fishing_inventory` - 自分の生け簀（バケツ）を確認\n"
+                "`/fishing_sale [index/all]` - 獲物を売却して cr に換金"
+            ),
+            inline=False
+        )
 
-        embed.set_author(name="Rb m/25 Interface Terminal", icon_url=self.bot.user.display_avatar.url)
-        embed.set_footer(text="Rb m/25 Documentation Unit | Reliability and Transparency")
+        # --- ギャラリー & エンタメ ---
+        embed.add_field(
+            name="🖼️ ギャラリー & エンタメ (Entertainment)",
+            value=(
+                "`/gallery_add [name] [image]` - 画像をストックする\n"
+                "`/gallery_view [name]` - 保存した画像を呼び出す\n"
+                "`/roulette [amount]` - 所持金を賭けて勝負"
+            ),
+            inline=False
+        )
+
+        # --- システム ---
+        embed.add_field(
+            name="⚙️ システム (System)",
+            value=(
+                "`/ping` - 応答速度を確認\n"
+                "`/status` - ボットの稼働状況を確認"
+            ),
+            inline=False
+        )
+
+        embed.set_footer(text="Rb m/25 System | 指令の実行には権限が必要です")
         
-        # ヘルプは自分だけに表示されるように設定
-        await it.response.send_message(embed=embed, ephemeral=True)
+        await it.response.send_message(embed=embed)
 
 async def setup(bot):
-    from __main__ import ledger_instance
-    await bot.add_cog(Help(bot, ledger_instance))
+    await bot.add_cog(Help(bot))
