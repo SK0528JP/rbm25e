@@ -20,11 +20,18 @@ class Ledger:
                 response = requests.get(url, headers=headers)
                 if response.status_code == 200:
                     gist_data = response.json()
-                    content = gist_data["files"][self.filename]["content"]
-                    print("[SYSTEM] Data synced from Gist successfully.")
-                    return json.loads(content)
+                    # 指定したファイル名がGist内に存在するか確認
+                    if self.filename in gist_data["files"]:
+                        content = gist_data["files"][self.filename]["content"]
+                        # 中身が空（新規作成直後など）の場合は空辞書を返す
+                        if not content.strip():
+                            return {}
+                        print(f"[SYSTEM] Gistからデータを読み込みました: {self.filename}")
+                        return json.loads(content)
+                else:
+                    print(f"[WARNING] Gistからの取得に失敗 (Status: {response.status_code})")
             except Exception as e:
-                print(f"[WARNING] Gist sync failed: {e}. Falling back to local.")
+                print(f"[WARNING] Gist同期エラー: {e}")
         
         return self.load_local()
 
@@ -34,20 +41,21 @@ class Ledger:
             try:
                 with open(self.filename, "r", encoding="utf-8") as f:
                     return json.load(f)
-            except:
+            except Exception as e:
+                print(f"[ERROR] ローカルファイルの読み込み失敗: {e}")
                 return {}
         return {}
 
     def save(self):
         """データを保存し、Gistへアップロードします。"""
-        # まずローカルに保存
+        # 1. まずローカルファイルを更新
         try:
             with open(self.filename, "w", encoding="utf-8") as f:
                 json.dump(self.data, f, indent=4, ensure_ascii=False)
         except Exception as e:
-            print(f"[ERROR] Local save failed: {e}")
+            print(f"[ERROR] ローカル保存失敗: {e}")
 
-        # Gistへアップロード（永続化）
+        # 2. Gistへアップロード（GitHub Actions終了後もデータを残すため）
         if self.github_token and self.gist_id:
             try:
                 url = f"https://api.github.com/gists/{self.gist_id}"
@@ -61,30 +69,34 @@ class Ledger:
                 }
                 res = requests.patch(url, headers=headers, json=payload)
                 if res.status_code == 200:
-                    print("[SYSTEM] Data backed up to Gist.")
+                    print("[SYSTEM] Gistへのバックアップが完了しました。")
                 else:
-                    print(f"[ERROR] Gist update failed: {res.status_code}")
+                    print(f"[ERROR] Gistバックアップ失敗 (Status: {res.status_code})")
             except Exception as e:
-                print(f"[ERROR] Gist sync error: {e}")
+                print(f"[ERROR] Gist通信エラー: {e}")
 
     def get_user(self, user_id):
+        """
+        ユーザーデータを取得し、新規ユーザーなら初期化します。
+        """
         uid = str(user_id)
         if uid not in self.data:
             self.data[uid] = {
                 "xp": 0,
                 "money": 100,
-                "lang": "ja",
+                "lang": "ja", # 日本語固定運用ですが、互換性のために保持
                 "joined_at": datetime.datetime.now().strftime("%Y-%m-%d"),
                 "last_active": "N/A"
             }
         
         u = self.data[uid]
-        if "lang" not in u: u["lang"] = "ja"
+        # 既存データのフィールド補完
         if "money" not in u: u["money"] = 100
         if "xp" not in u: u["xp"] = 0
         return u
 
     def add_xp(self, user_id, amount):
+        """貢献度を加算します。"""
         u = self.get_user(user_id)
         u["xp"] += amount
         u["last_active"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
