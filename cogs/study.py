@@ -2,46 +2,53 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import io
-import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
+
+# matplotlibのインポートエラーを防止
+try:
+    import matplotlib.pyplot as plt
+    import matplotlib.dates as mdates
+    HAS_MATPLOTLIB = True
+except ImportError:
+    HAS_MATPLOTLIB = False
+
+# タイムゾーンの再定義（self.bot.JSTの参照エラーを防ぐ）
+JST = timezone(timedelta(hours=9), 'JST')
 
 class Study(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    # --- グラフ生成メソッド ---
     def create_study_graph(self, history, days=7):
-        now_jst = datetime.now(self.bot.JST)
+        if not HAS_MATPLOTLIB:
+            return None
+        
+        now_jst = datetime.now(JST)
         dates = []
         minutes = []
 
-        # 指定された日数分のデータを抽出
         for i in range(days - 1, -1, -1):
             d = (now_jst - timedelta(days=i))
             d_str = d.strftime("%Y-%m-%d")
             dates.append(d)
             minutes.append(history.get(d_str, 0))
 
-        # グラフの描画設定
         plt.figure(figsize=(8, 4))
-        plt.style.use('dark_background') # Discordのダークモードに合わせる
-        plt.bar(dates, minutes, color='#5865F2') # Discord Blueに近い色
+        plt.style.use('dark_background')
+        plt.bar(dates, minutes, color='#5865F2')
         
         plt.title(f"Study Time (Last {days} days)", fontsize=15)
         plt.xlabel("Date", fontsize=12)
         plt.ylabel("Minutes", fontsize=12)
         
-        # X軸のフォーマット（日付を見やすく）
         plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%m/%d'))
         plt.gca().xaxis.set_major_locator(mdates.DayLocator())
         
-        # メモリ内に画像として保存
         buf = io.BytesIO()
         plt.savefig(buf, format='png', bbox_inches='tight')
         buf.seek(0)
-        plt.close() # メモリ解放
+        plt.close()
         return buf
 
     @app_commands.command(name="study_start", description="学習任務を開始します。")
@@ -63,7 +70,7 @@ class Study(commands.Cog):
             title="🚀 学習任務開始",
             description=f"同志 {interaction.user.display_name}、戦線へようこそ。",
             color=discord.Color.blue(),
-            timestamp=datetime.now(self.bot.JST)
+            timestamp=datetime.now(JST)
         )
         await interaction.followup.send(embed=embed)
 
@@ -78,7 +85,7 @@ class Study(commands.Cog):
             return
 
         elapsed_minutes = int((time.time() - start_time) // 60)
-        now_jst = datetime.now(self.bot.JST)
+        now_jst = datetime.now(JST)
         today_str = now_jst.strftime("%Y-%m-%d")
         
         if "study_history" not in user_data:
@@ -107,11 +114,11 @@ class Study(commands.Cog):
         app_commands.Choice(name="全期間", value="all")
     ])
     async def study_stats(self, interaction: discord.Interaction, period: str = "today"):
-        await interaction.response.defer() # グラフ生成に時間がかかる場合があるのでdefer
+        await interaction.response.defer()
         
         user_data = self.bot.ledger.get_user(interaction.user.id)
         history = user_data.get("study_history", {})
-        now_jst = datetime.now(self.bot.JST)
+        now_jst = datetime.now(JST)
         
         total = 0
         period_text = ""
@@ -131,10 +138,10 @@ class Study(commands.Cog):
                 total += history.get(date_str, 0)
             period_text = f"直近 {days} 日間"
             
-            # 「今週」を選んだ場合はグラフを生成
-            if period == "week":
+            if period == "week" and HAS_MATPLOTLIB:
                 graph_buf = self.create_study_graph(history, days=7)
-                file = discord.File(graph_buf, filename="study_graph.png")
+                if graph_buf:
+                    file = discord.File(graph_buf, filename="study_graph.png")
 
         embed = discord.Embed(
             title=f"📊 学習統計: {period_text}",
@@ -149,6 +156,9 @@ class Study(commands.Cog):
             embed.set_image(url="attachment://study_graph.png")
             await interaction.followup.send(embed=embed, file=file)
         else:
+            # グラフがない場合の補足メッセージ
+            if period == "week" and not HAS_MATPLOTLIB:
+                embed.set_footer(text="⚠️ グラフ生成ライブラリが未インストールのようです。")
             await interaction.followup.send(embed=embed)
 
 async def setup(bot):
