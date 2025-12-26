@@ -9,7 +9,7 @@ TOKEN = os.getenv("DISCORD_BOT_TOKEN")
 GIST_ID = os.getenv("GIST_ID")
 GITHUB_TOKEN = os.getenv("MY_GITHUB_TOKEN")
 # 同志たちのサーバーID（数字で入力）
-GUILD_ID = 1062900513017962576  # ← ここをあなたのサーバーIDに！
+GUILD_ID = None  # ← ここをあなたのサーバーIDに！
 
 JST = timezone(timedelta(hours=9), 'JST')
 
