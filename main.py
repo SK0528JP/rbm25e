@@ -40,6 +40,7 @@ class Rb_m25_Bot(commands.Bot):
             "cogs.entertainment", "cogs.roulette", "cogs.user",
             "cogs.ping", "cogs.help",
 "cogs.gallery", "cogs.exchange",
+"cogs.ranking",
 "cogs.fishing", "cogs.study"
         ]
         
