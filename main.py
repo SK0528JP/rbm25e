@@ -4,53 +4,53 @@ import os
 import asyncio
 from ledger import Ledger
 
-# 1. データの心臓部を起動
+# 1. データ管理ユニットの初期化
 ledger = Ledger()
 
-# 2. ボットの基本設定
 class MyBot(commands.Bot):
     def __init__(self):
         intents = discord.Intents.default()
         intents.message_content = True
         intents.members = True
-        # 起動時のステータスを「退席中(idle)」に、アクティビティを「国家を監視中」に設定
+        # ステータスを「退席中(idle)」に、アクティビティを「システム稼働中」に設定
         super().__init__(
             command_prefix="!", 
             intents=intents,
             status=discord.Status.idle,
-            activity=discord.Game(name="労働⛏️")
+            activity=discord.Activity(type=discord.ActivityType.watching, name="システム稼働状況")
         )
 
     async def setup_hook(self):
-        # cogsフォルダ内の全ファイルをロード
+        # 拡張モジュールのロード処理
         cog_files = ["utility", "economy", "entertainment", "admin"]
-        for file in cog_files:
-            try:
-                # 動的インポートとインスタンス化
-                if file == "utility":
-                    from cogs.utility import Utility
-                    await self.add_cog(Utility(self, ledger))
-                elif file == "economy":
-                    from cogs.economy import Economy
-                    await self.add_cog(Economy(self, ledger))
-                elif file == "entertainment":
-                    from cogs.entertainment import Entertainment
-                    await self.add_cog(Entertainment(self, ledger))
-                elif file == "admin":
-                    from cogs.admin import Admin
-                    await self.add_cog(Admin(self, ledger))
-                
-                print(f"[INFO] Cog読み込み成功: {file}")
-            except Exception as e:
-                print(f"[ERROR] Cog読み込み失敗 {file}: {e}")
+        
+        # モジュールを手動インポートして追加
+        from cogs.utility import Utility
+        from cogs.economy import Economy
+        from cogs.entertainment import Entertainment
+        from cogs.admin import Admin
+        
+        cogs_map = {
+            "utility": Utility,
+            "economy": Economy,
+            "entertainment": Entertainment,
+            "admin": Admin
+        }
 
-        # スラッシュコマンドを同期
+        for name, cog_class in cogs_map.items():
+            try:
+                await self.add_cog(cog_class(self, ledger))
+                print(f"[SYSTEM] Extension loaded: {name}")
+            except Exception as e:
+                print(f"[ERROR] Failed to load extension {name}: {e}")
+
+        # スラッシュコマンドの同期
         await self.tree.sync()
-        print("[INFO] スラッシュコマンド同期完了")
+        print("[SYSTEM] Command synchronization completed.")
 
 bot = MyBot()
 
-# --- 労働監視（XP自動加算システム） ---
+# --- アクティビティ・ログ（XP加算処理） ---
 last_xp_time = {}
 
 @bot.event
@@ -61,7 +61,7 @@ async def on_message(message):
     now = discord.utils.utcnow()
     uid = message.author.id
     
-    # 3秒のクールダウン
+    # 3秒のインターバル制限
     if uid not in last_xp_time or (now - last_xp_time[uid]).total_seconds() > 3:
         ledger.add_xp(uid, 2)
         ledger.save()
@@ -69,13 +69,15 @@ async def on_message(message):
 
     await bot.process_commands(message)
 
-# --- 起動報告 ---
+# --- 起動ログ ---
 @bot.event
 async def on_ready():
-    print(f"🛠️ システム稼働開始：{bot.user.name} (ID: {bot.user.id})")
-    print(f"ステータス：{bot.status} / アクティビティ：国家を監視中")
-    print("------ 全ての準備が整った。革命は続く。 ------")
+    print(f"[INFO] Logged in as: {bot.user.name} (ID: {bot.user.id})")
+    print(f"[INFO] Status: {bot.status} / activity: watching System Status")
+    print("--------------------------------------------------")
+    print("  Central Information System is now operational.  ")
+    print("--------------------------------------------------")
 
-# 実行
+# 実行ユニット
 token = os.getenv("DISCORD_BOT_TOKEN")
 bot.run(token)
