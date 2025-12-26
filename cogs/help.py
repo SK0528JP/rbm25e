@@ -6,80 +6,85 @@ class Help(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @app_commands.command(name="help", description="Rb m/25 のすべての機能を確認します")
+    @app_commands.command(name="help", description="Rb m/25 のコマンドリストを表示します")
     async def help(self, it: discord.Interaction):
         embed = discord.Embed(
             title="📖 Rb m/25 命令体系マニュアル",
-            description="サーバーで利用可能な全コマンドのリストです。",
+            description="現在利用可能なコマンド一覧と機能概要です。",
             color=0x3498db
         )
 
-        # --- プロフィール・個人ステータス ---
+        # --- ユーザー & ステータス ---
+        # status.py / user.py
         embed.add_field(
-            name="👤 ユーザー情報 (User Status)",
+            name="👤 ユーザー・ステータス (User & Status)",
             value=(
-                "`/status` - 自分のレベル、XP、所持金、称号を簡易表示\n"
-                "`/balance` - 資産(cr)と累計XPの詳細確認"
+                "`/status` - 自分のステータス（所持金・XP・レベル・称号）を確認\n"
+                "`/user` - ユーザープロフィールの詳細設定・確認"
             ),
             inline=False
         )
 
         # --- 経済 & ランキング ---
+        # economy.py / ranking.py / exchange.py
         embed.add_field(
-            name="💰 経済・ランキング (Finance & Ranking)",
+            name="💰 経済・ランキング (Economy)",
             value=(
-                "`/pay [user] [amount]` - 資産を他の同志に送金\n"
-                "`/ranking [category]` - 資産/XP/釣り/学習のランキングを表示\n"
-                "`/exchange` - 通貨の交換や特殊アイテムの確認"
+                "`/pay [user] [amount]` - 他のユーザーに cr (通貨) を送金\n"
+                "`/ranking [category]` - 資産・XP・釣り・学習のランキングを表示\n"
+                "`/exchange` - ポイント交換・アイテム交換所へのアクセス"
             ),
             inline=False
         )
 
-        # --- 学習管理 ---
-        embed.add_field(
-            name="📚 学習管理 (Study)",
-            value=(
-                "`/study_start` - 学習セッションを開始\n"
-                "`/study_end` - 学習を終了し、報酬(cr/xp)を獲得\n"
-                "`/study_stats` - 今日の学習時間と累計記録を確認"
-            ),
-            inline=False
-        )
-
-        # --- フィッシング ---
+        # --- フィッシング (釣り) ---
+        # fishing.py
         embed.add_field(
             name="🎣 フィッシング (Fishing)",
             value=(
-                "`/fishing` - 釣りを行う\n"
-                "`/fishing_inventory` - 自分の生け簀を確認\n"
-                "`/fishing_sale [index/all]` - 獲物を売却して cr に換金"
+                "`/fishing` - 釣りを開始する\n"
+                "`/fishing_inventory` - 獲得した獲物（インベントリ）を確認\n"
+                "`/fishing_sale [index/all]` - 獲物を売却して cr を獲得"
             ),
             inline=False
         )
 
-        # --- ギャラリー & エンタメ ---
+        # --- 学習 (Study) ---
+        # study.py
         embed.add_field(
-            name="🖼️ エンターテインメント (Entertainment)",
+            name="📚 学習機能 (Study)",
             value=(
-                "`/gallery_add [name] [image]` - 画像をストック\n"
-                "`/gallery_view [name]` - 保存した画像を呼び出し\n"
-                "`/roulette [amount]` - 所持金を賭けたルーレット\n"
-                "`/user` - ユーザー設定や詳細プロフィールの表示"
+                "`/study_start` - 学習タイマーを開始\n"
+                "`/study_end` - 学習を終了し、時間に応じた報酬を獲得\n"
+                "`/study_stats` - 自分の学習記録統計を確認"
             ),
             inline=False
         )
 
-        # --- システム ---
+        # --- エンターテインメント ---
+        # gallery.py / roulette.py
+        embed.add_field(
+            name="🎲 エンタメ・ギャラリー (Entertainment)",
+            value=(
+                "`/roulette [amount]` - 所持金を賭けたルーレット勝負\n"
+                "`/gallery_add [name] [image]` - サーバーの思い出(画像)を保存\n"
+                "`/gallery_view [name]` - 保存された画像を表示"
+            ),
+            inline=False
+        )
+
+        # --- システム管理 ---
+        # ping.py / admin.py
         embed.add_field(
             name="⚙️ システム (System)",
             value=(
-                "`/ping` - 応答速度の測定\n"
-                "`/admin` - 管理者用コマンド(制限あり)"
+                "`/ping` - Botの応答速度(Latency)を確認\n"
+                "`/admin` - 管理者専用メニュー（権限所有者のみ）"
             ),
             inline=False
         )
 
-        embed.set_footer(text="Rb m/25 System | 各種データの同期は完了しています")
+        embed.set_footer(text="Rb m/25 System | Validated Commands Only")
         
         await it.response.send_message(embed=embed)
 
