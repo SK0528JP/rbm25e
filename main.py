@@ -2,20 +2,19 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 import os
-import asyncio
+import traceback
 from ledger import Ledger
 from dotenv import load_dotenv
 
-# 1. 環境変数のロード (.envからTOKENを取得)
+# 1. 環境変数のロード
 load_dotenv()
 
-# 2. データセンターの初期化
-# すべてのCogはこの唯一のインスタンスを共有します
+# 2. データの初期化 (Gist同期機能付きLedger)
+# ※ledger.py 内で lang キーを扱っていても、この構成なら問題ありません
 ledger_instance = Ledger()
 
 class Rbm25Bot(commands.Bot):
     def __init__(self):
-        # インテントの設定 (メンバー管理とメッセージ読み取りを有効化)
         intents = discord.Intents.default()
         intents.message_content = True
         intents.members = True
@@ -23,18 +22,18 @@ class Rbm25Bot(commands.Bot):
         super().__init__(
             command_prefix="!", 
             intents=intents,
-            status=discord.Status.idle,
+            status=discord.Status.online,
             activity=discord.Activity(
                 type=discord.ActivityType.watching, 
-                name="Rb m/25 System Status"
+                name="Rb m/25 システム稼働中"
             )
         )
 
     async def setup_hook(self):
         """
-        システム起動時にモジュールをロードし、スラッシュコマンドをDiscordへ登録します。
+        モジュールの読み込みとコマンドの同期
         """
-        # ロード対象のCogリスト
+        # 読み込むコグのリスト
         cogs_list = [
             "cogs.utility",
             "cogs.economy",
@@ -42,71 +41,87 @@ class Rbm25Bot(commands.Bot):
             "cogs.admin"
         ]
 
-        print("--- Rb m/25 | Initialization Sequence ---")
+        print("--- Rb m/25 | 初期化シーケンス開始 ---")
         for extension in cogs_list:
             try:
-                # 拡張機能のロード
                 await self.load_extension(extension)
-                print(f"[SUCCESS] Module: {extension}")
-            except Exception as e:
-                print(f"[FAILURE] Module: {extension} | Reason: {e}")
+                print(f"[成功] モジュール読み込み完了: {extension}")
+            except Exception:
+                print(f"[失敗] モジュール: {extension}\n{traceback.format_exc()}")
 
-        # グローバルコマンドの同期 (Discord側にコマンドを表示させるための最重要処理)
+        # スラッシュコマンドをDiscordサーバーへ同期
         try:
-            print("[SYSTEM] Synchronizing global command tree...")
+            print("[システム] コマンドを同期中...")
             synced = await self.tree.sync()
-            print(f"[SYSTEM] Interface Online: {len(synced)} commands synced.")
-        except Exception as e:
-            print(f"[CRITICAL] Tree sync failed: {e}")
+            print(f"[システム] オンライン: {len(synced)} 個のコマンドを同期しました。")
+        except Exception:
+            print(f"[致命的] ツリー同期失敗:\n{traceback.format_exc()}")
 
 bot = Rbm25Bot()
 
 # --- 3. グローバル・エラーハンドラー ---
 @bot.tree.error
 async def on_app_command_error(it: discord.Interaction, error: app_commands.AppCommandError):
-    """コマンド実行中のエラーを補足し、ユーザーへ通知します。"""
+    """
+    エラー発生時に詳細をログに出力し、ユーザーに通知します
+    """
+    orig_error = getattr(error, "original", error)
+    
+    # クールダウン（連投防止）エラー
     if isinstance(error, app_commands.CommandOnCooldown):
-        await it.response.send_message(f"Cooldown: {error.retry_after:.1f}s", ephemeral=True)
-    else:
-        print(f"[LOG ERROR] {error}")
-        if not it.response.is_done():
-            await it.response.send_message("An internal system error has occurred.", ephemeral=True)
+        await it.response.send_message(f"しばらく待ってから実行してください（残り {error.retry_after:.1f}秒）", ephemeral=True)
+        return
 
-# --- 4. 貢献度(XP) 蓄積ユニット ---
+    # コンソールへの詳細出力
+    print("\n" + "!"*40)
+    print("🔴 コマンドエラー報告")
+    print(f"コマンド: /{it.command.name if it.command else '不明'}")
+    print(f"ユーザー: {it.user}")
+    print(f"エラー型: {type(orig_error).__name__}")
+    print(f"内容: {orig_error}")
+    print("-" * 20)
+    traceback.print_exception(type(orig_error), orig_error, orig_error.__traceback__)
+    print("!"*40 + "\n")
+
+    # ユーザーへの応答
+    if not it.response.is_done():
+        await it.response.send_message(
+            f"⚠️ **システムエラーが発生しました**\n型: `{type(orig_error).__name__}`\n管理者に連絡してください。", 
+            ephemeral=True
+        )
+
+# --- 4. 貢献度(XP) 蓄積ロジック ---
 last_xp_time = {}
 
 @bot.event
 async def on_message(message):
-    # Bot自身の発言は無視
     if message.author.bot:
         return
     
     now = discord.utils.utcnow()
     uid = message.author.id
     
-    # 3秒間のインターバルを置いてXPを加算
+    # 3秒に1回、2 XP を付与
     if uid not in last_xp_time or (now - last_xp_time[uid]).total_seconds() > 3:
-        ledger_instance.add_xp(uid, 2)
-        # ledger.py 内で自動セーブと lang 補完が行われます
+        u = ledger_instance.get_user(uid)
+        u["xp"] += 2
         ledger_instance.save()
         last_xp_time[uid] = now
         
-    # プレフィックスコマンドの処理 (必要な場合)
     await bot.process_commands(message)
 
-# --- 5. 起動完了ログ ---
+# --- 5. 起動完了通知 ---
 @bot.event
 async def on_ready():
     print("--------------------------------------------------")
-    print(f"  Rb m/25 | Swedish Modern System Interface")
-    print(f"  Operational as: {bot.user.name}")
-    print(f"  Status: Fully Integrated")
+    print(f"  Rb m/25 | 日本語専用インターフェース")
+    print(f"  稼働中: {bot.user.name}")
     print("--------------------------------------------------")
 
-# --- 6. システム・エントリーポイント ---
+# --- 6. ボットの実行 ---
 if __name__ == "__main__":
     token = os.getenv("DISCORD_BOT_TOKEN")
     if token:
         bot.run(token)
     else:
-        print("[CRITICAL] Termination: DISCORD_BOT_TOKEN not found in environment.")
+        print("[致命的] DISCORD_BOT_TOKEN が環境変数に見つかりません。")
