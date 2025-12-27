@@ -18,85 +18,60 @@ class AIChat(commands.Cog):
         else:
             self.model = None
 
-    # --- スラッシュコマンド：/ai グループの定義 ---
-    # ここで Group を作成し、コマンドを追加します
+    # --- 重要：コマンドグループの定義と登録 ---
+    # app_commands.Group を直接定義
     ai_group = app_commands.Group(name="ai", description="Gemini知能中枢による支援機能")
 
     async def generate_content_async(self, contents):
-        """Gemini APIを使用してコンテンツを生成する共通非同期関数"""
         if not self.model:
-            return "❌ Gemini APIキーが設定されていないため、知能中枢が起動していません。"
-        
+            return "❌ Gemini APIキーが未設定です。"
         try:
             response = await self.model.generate_content_async(contents)
-            if response.text:
-                return response.text
-            else:
-                return "⚠️ 適切な回答を生成できませんでした。"
+            return response.text if response.text else "⚠️ 回答を生成できませんでした。"
         except Exception as e:
-            return f"⚠️ 思考回路でエラーが発生しました: {str(e)}"
+            return f"⚠️ エラー発生: {str(e)}"
 
-    @ai_group.command(name="ask", description="Geminiに質問や相談をします（テキストのみ）")
-    @app_commands.describe(prompt="質問したい内容")
+    # グループ内にコマンドを配置
+    @ai_group.command(name="ask", description="Geminiに質問します（テキスト）")
+    @app_commands.describe(prompt="質問内容")
     async def ask(self, interaction: discord.Interaction, prompt: str):
-        """テキストベースの対話コマンド"""
         await interaction.response.defer()
         answer = await self.generate_content_async(prompt)
-        
-        if len(answer) > 2000:
-            answer = answer[:1990] + "..."
+        if len(answer) > 2000: answer = answer[:1990] + "..."
         await interaction.followup.send(f"🤖 **AI回答:**\n{answer}")
 
-    @ai_group.command(name="image", description="画像を解析し、その内容について回答します")
-    @app_commands.describe(attachment="解析する画像ファイル", prompt="画像について聞きたいこと")
+    @ai_group.command(name="image", description="画像を解析します")
+    @app_commands.describe(attachment="画像ファイル", prompt="質問（任意）")
     async def image(self, interaction: discord.Interaction, attachment: discord.Attachment, prompt: str = "この画像について説明してください"):
-        """画像+テキストの解析コマンド"""
         await interaction.response.defer()
-
         if not attachment.content_type or not attachment.content_type.startswith('image/'):
-            return await interaction.followup.send("❌ 解析可能な画像ファイルを選択してください。", ephemeral=True)
+            return await interaction.followup.send("❌ 画像を選択してください。", ephemeral=True)
 
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get(attachment.url) as resp:
-                    if resp.status != 200:
-                        return await interaction.followup.send("❌ 画像データの取得に失敗しました。")
+                    if resp.status != 200: return await interaction.followup.send("❌ 取得失敗")
                     image_data = await resp.read()
 
             image_part = {"mime_type": attachment.content_type, "data": image_data}
             answer = await self.generate_content_async([image_part, prompt])
-            
-            if len(answer) > 2000:
-                answer = answer[:1990] + "..."
+            if len(answer) > 2000: answer = answer[:1990] + "..."
             await interaction.followup.send(f"🤖 **画像解析結果:**\n{answer}")
         except Exception as e:
-            await interaction.followup.send(f"❌ 解析中にエラーが発生しました: {str(e)}")
+            await interaction.followup.send(f"❌ エラー: {str(e)}")
 
-    # --- メンション応答機能 ---
+    # メンション応答はそのまま維持
     @commands.Cog.listener()
     async def on_message(self, message):
-        if message.author.bot:
-            return
-
+        if message.author.bot: return
         is_mentioned = self.bot.user in message.mentions
-        is_reply_to_bot = (
-            message.reference and 
-            message.reference.resolved and 
-            message.reference.resolved.author.id == self.bot.user.id
-        )
-
-        if is_mentioned or is_reply_to_bot:
+        is_reply = message.reference and message.reference.resolved and message.reference.resolved.author.id == self.bot.user.id
+        if is_mentioned or is_reply:
             clean_content = re.sub(f'<@!?{self.bot.user.id}>', '', message.content).strip()
-            
-            if not clean_content and is_mentioned:
-                await message.reply("📡 何かお手伝いできることはありますか？")
-                return
-
+            if not clean_content: return await message.reply("📡 何かお手伝いしましょうか？")
             async with message.channel.typing():
                 answer = await self.generate_content_async(clean_content)
-                if len(answer) > 2000:
-                    answer = answer[:1990] + "..."
-                await message.reply(answer)
+                await message.reply(answer[:2000])
 
 async def setup(bot):
     await bot.add_cog(AIChat(bot))
