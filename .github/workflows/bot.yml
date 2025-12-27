@@ -13,8 +13,8 @@ jobs:
   run-bot:
     runs-on: ubuntu-latest
     
-    # 次のcron起動と重ならないよう、178分で強制終了させてゾンビ化を防ぐ
-    timeout-minutes: 178
+    # 次のcron起動と重ならないよう、185分で強制終了させてゾンビ化を防ぐ
+    timeout-minutes: 185
     
     steps:
       - name: Checkout code
