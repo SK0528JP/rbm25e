@@ -24,14 +24,20 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          # requirements.txt から一括インストールするよう変更
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
       - name: Run bot
         env:
+          # Discordとの接続
           DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          
+          # 知能中枢 (Hugging Face) への通行証
+          HUGGINGFACE_TOKEN: ${{ secrets.HUGGINGFACE_TOKEN }}
+          
+          # バックアップ・ログ保存用 (Gist)
           MY_GITHUB_TOKEN: ${{ secrets.MY_GITHUB_TOKEN }}
           GIST_ID: ${{ secrets.GIST_ID }}
-          # GeminiのAPIキーもここで注入！
+          
+          # 以前のGeminiキー（残しておいても無害です）
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python main.py
