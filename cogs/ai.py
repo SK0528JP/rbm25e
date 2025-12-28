@@ -7,72 +7,79 @@ import re
 import json
 
 class AIChat(commands.Cog):
-    ai_group = app_commands.Group(name="ai", description="Rb m/25E 統合知能中枢")
+    ai_group = app_commands.Group(name="ai", description="Rb m/25E 安定知能中枢")
 
     def __init__(self, bot):
         self.bot = bot
         self.api_token = os.getenv("HUGGINGFACE_TOKEN")
         
-        # 【重要】最新のルーティングURLに変更
-        self.base_url = "https://router.huggingface.co/hf-inference/models"
+        # 安定性を重視し、多くのユーザーが現在も成功しているエンドポイントを使用
+        self.api_url = "https://api-inference.huggingface.co/models"
         
-        # 使用するモデルのパス
-        self.chat_model = "google/gemma-1.1-7b-it"
+        # モデル選定：申請不要・日本語対応・高稼働率のモデルを厳選
+        # 対話用: Microsoft Phi-3 (非常に軽量でエラーが出にくい)
+        self.chat_model = "microsoft/Phi-3-mini-4k-instruct"
+        # 視覚用: Salesforce BLIP (画像解析のデファクトスタンダード)
         self.vision_model = "Salesforce/blip-image-captioning-base"
 
-    async def query_huggingface(self, model_path, payload, is_binary=False):
-        """最新のAPIエンドポイントへのリクエスト処理"""
+    async def query_api(self, model_id, payload, is_binary=False):
         if not self.api_token:
             return "❌ HUGGINGFACE_TOKEN が未設定です。"
 
-        url = f"{self.base_url}/{model_path}"
+        url = f"{self.api_url}/{model_id}"
         headers = {"Authorization": f"Bearer {self.api_token}"}
         
         try:
             async with aiohttp.ClientSession() as session:
-                # 画像（バイナリ）かテキスト（JSON）かで送り方を変える
                 if is_binary:
-                    kwargs = {"data": payload}
+                    # 画像データ送信時
+                    async with session.post(url, headers=headers, data=payload) as resp:
+                        if resp.status == 200:
+                            return await resp.json()
+                        return await self.handle_error(resp)
                 else:
-                    kwargs = {"json": payload}
-
-                async with session.post(url, headers=headers, **kwargs) as resp:
-                    if resp.status == 200:
-                        return await resp.json()
-                    elif resp.status == 503:
-                        return "💤 AIユニットを起動中です。20秒ほど待って再試行してください。"
-                    elif resp.status == 410:
-                        return "⚠️ APIエンドポイントが変更されました。管理者に連絡してください。"
-                    else:
-                        res_json = await resp.json()
-                        return f"⚠️ エラー ({resp.status}): {res_json.get('error', '通信失敗')}"
+                    # テキストデータ送信時
+                    async with session.post(url, headers=headers, json=payload) as resp:
+                        if resp.status == 200:
+                            return await resp.json()
+                        return await self.handle_error(resp)
         except Exception as e:
-            return f"⚠️ システム障害: {str(e)}"
+            return f"⚠️ 通信失敗: {str(e)}"
+
+    async def handle_error(self, resp):
+        if resp.status == 503:
+            return "💤 AIユニット起動中... (20秒ほど待って再試行してください)"
+        try:
+            err_data = await resp.json()
+            return f"⚠️ APIエラー ({resp.status}): {err_data.get('error', '不明')}"
+        except:
+            return f"⚠️ 致命的エラー ({resp.status}): モデルのパスが変更された可能性があります。"
 
     @ai_group.command(name="ask", description="AIと対話します")
     async def ask(self, interaction: discord.Interaction, prompt: str):
         await interaction.response.defer()
         
+        # Phi-3 向けのシンプルなプロンプト形式
         payload = {
-            "inputs": f"<start_of_turn|user\n{prompt}<end_of_turn>\n<start_of_turn|model\n",
-            "parameters": {"max_new_tokens": 500}
+            "inputs": f"<|user|>\n{prompt}<|end|>\n<|assistant|>",
+            "parameters": {"max_new_tokens": 500, "return_full_text": False}
         }
         
-        result = await self.query_huggingface(self.chat_model, payload)
-
+        result = await self.query_api(self.chat_model, payload)
+        
         if isinstance(result, str):
             answer = result
         else:
-            full_text = result[0]['generated_text']
-            answer = full_text.split("<start_of_turn|model\n")[-1].strip()
+            # 応答リストからテキストを抽出
+            answer = result[0].get('generated_text', '応答が空でした。')
 
         await interaction.followup.send(f"🤖 **AI回答:**\n{answer[:1900]}")
 
-    @ai_group.command(name="image", description="画像を説明します")
+    @ai_group.command(name="image", description="画像を解析します")
     async def image(self, interaction: discord.Interaction, attachment: discord.Attachment):
         await interaction.response.defer()
         
-        if not attachment.content_type.startswith('image/'):
+        if not attachment.content_type or not attachment.content_type.startswith('image/'):
             return await interaction.followup.send("❌ 画像ファイルを指定してください。")
 
         try:
@@ -80,29 +87,15 @@ class AIChat(commands.Cog):
                 async with session.get(attachment.url) as resp:
                     image_data = await resp.read()
 
-            result = await self.query_huggingface(self.vision_model, image_data, is_binary=True)
+            result = await self.query_api(self.vision_model, image_data, is_binary=True)
             
             if isinstance(result, str):
                 await interaction.followup.send(result)
             else:
-                description = result[0].get('generated_text', '解析できませんでした。')
-                await interaction.followup.send(f"🤖 **視覚解析結果:**\nこの画像は「{description}」のようです。")
+                desc = result[0].get('generated_text', '解析不能')
+                await interaction.followup.send(f"🤖 **視覚解析:** {desc}")
         except Exception as e:
-            await interaction.followup.send(f"❌ 通信失敗: {str(e)}")
-
-    @commands.Cog.listener()
-    async def on_message(self, message):
-        if message.author.bot or self.bot.user not in message.mentions:
-            return
-        
-        content = re.sub(f'<@!?{self.bot.user.id}>', '', message.content).strip()
-        if not content: return
-
-        async with message.channel.typing():
-            payload = {"inputs": f"User: {content}\nAssistant:"}
-            result = await self.query_huggingface(self.chat_model, payload)
-            answer = result if isinstance(result, str) else result[0]['generated_text']
-            await message.reply(answer[:2000])
+            await interaction.followup.send(f"❌ 解析失敗: {str(e)}")
 
 async def setup(bot):
     await bot.add_cog(AIChat(bot))
