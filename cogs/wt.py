@@ -2,87 +2,59 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 import aiohttp
-import asyncio
-
-COUNTRIES = {
-    "usa": "🇺🇸 USA", "germany": "🇩🇪 Germany", "ussr": "🇷🇺 USSR",
-    "britain": "🇬🇧 Britain", "japan": "🇯🇵 Japan", "china": "🇨🇳 China",
-    "italy": "🇮🇹 Italy", "france": "🇫🇷 France", "sweden": "🇸🇪 Sweden", "israel": "🇮🇱 Israel"
-}
-CATEGORIES = {
-    "tanks": "🚜 陸上兵器", "planes": "✈️ 航空機", 
-    "ships": "🚢 艦艇", "helicopters": "🚁 ヘリコプター"
-}
 
 class WarThunder(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.api_base = "https://www.wtvehiclesapi.repository.guru/api/vehicles"
-        # サーバーに拒否されないためのブラウザ偽装
-        self.headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
-        }
+        # 新しいAPIのベースURL
+        self.base_url = "https://www.wtvehiclesapi.sgambe.serv00.net/api/v1"
 
-    @app_commands.command(name="wt", description="War Thunder兵器カタログ")
-    @app_commands.describe(country="国家を選択", category="兵器カテゴリを選択")
-    @app_commands.choices(
-        country=[app_commands.Choice(name=v, value=k) for k, v in COUNTRIES.items()],
-        category=[app_commands.Choice(name=v, value=k) for k, v in CATEGORIES.items()]
-    )
-    async def wt(self, interaction: discord.Interaction, country: str, category: str):
-        # 1. 即座に応答
-        await interaction.response.send_message(f"📡 {COUNTRIES[country]} の {CATEGORIES[category]} データを取得中...", ephemeral=True)
-        
-        url = f"{self.api_base}/{category}"
-        data = None
+    @app_commands.command(name="wt", description="War Thunder兵器データベース検索")
+    @app_commands.describe(name="検索したい兵器名（例: tiger, m1 abrams, a6m）")
+    async def wt(self, interaction: discord.Interaction, name: str):
+        # 1. 3秒ルール回避のため即座に応答（考え中...を表示）
+        await interaction.response.defer()
 
-        # 2. 最大3回のリトライ処理
-        async with aiohttp.ClientSession(headers=self.headers) as session:
-            for attempt in range(3):
-                try:
-                    async with session.get(url, timeout=15) as resp:
-                        if resp.status == 200:
-                            data = await resp.json()
-                            break
-                        elif resp.status == 429: # Too Many Requests
-                            await asyncio.sleep(2) # 少し待ってリトライ
-                        else:
-                            continue
-                except Exception:
-                    await asyncio.sleep(1)
-                    continue
+        # 2. 新APIの検索エンドポイントを使用
+        # パラメータで絞り込むため、通信量が極めて少なくなります
+        search_url = f"{self.base_url}/vehicles/search"
+        params = {"name": name}
 
-        if not data:
-            return await interaction.edit_original_response(content="⚠️ サーバーが応答しませんでした。時間を置いて試してください。")
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(search_url, params=params, timeout=10) as resp:
+                    if resp.status == 200:
+                        results = await resp.json()
+                        
+                        if not results:
+                            return await interaction.followup.send(f"❌ `{name}` に一致する兵器は見つかりませんでした。")
 
-        # 3. フィルタリングとUI構築
-        filtered = {k: v for k, v in data.items() if v.get('country') == country}
-        if not filtered:
-            return await interaction.edit_original_response(content=f"❌ {COUNTRIES[country]} のデータは見つかりませんでした。")
+                        # 複数ヒットした場合は最初の1件を表示（あるいはリスト化）
+                        # このAPIはリストで返ってくるため、0番目を取得
+                        data = results[0]
+                        
+                        embed = discord.Embed(
+                            title=f"📊 兵器データ: {data.get('name')}",
+                            color=discord.Color.blue()
+                        )
+                        
+                        # APIのフィールド名に合わせて抽出
+                        embed.add_field(name="国家", value=data.get('country', '不明').upper(), inline=True)
+                        embed.add_field(name="BR", value=data.get('br', '不明'), inline=True)
+                        embed.add_field(name="ランク", value=data.get('rank', '不明'), inline=True)
+                        embed.add_field(name="タイプ", value=data.get('type', '不明'), inline=True)
 
-        options = []
-        for v_id, v_info in list(filtered.items())[:25]:
-            name = v_info.get('name', v_id)[:50]
-            options.append(discord.SelectOption(label=name, value=v_id))
-        
-        view = discord.ui.View()
-        select = discord.ui.Select(placeholder="具体的な兵器を選択してください...", options=options)
+                        # 画像URLの処理
+                        if data.get('image_url'):
+                            embed.set_image(url=data['image_url'])
 
-        async def select_callback(it: discord.Interaction):
-            await it.response.defer()
-            res = data.get(select.values[0])
-            if res:
-                embed = discord.Embed(title=f"📊 {res.get('name', '??')}", color=0x2ecc71)
-                embed.add_field(name="BR", value=res.get('br', '??'), inline=True)
-                embed.add_field(name="Rank", value=res.get('rank', '??'), inline=True)
-                if 'image_url' in res:
-                    embed.set_image(url=res['image_url'])
-                await it.followup.send(embed=embed)
-
-        select.callback = select_callback
-        view.add_item(select)
-        
-        await interaction.edit_original_response(content=f"✅ 取得完了。{COUNTRIES[country]} リスト:", view=view)
+                        embed.set_footer(text=f"ID: {data.get('identifier')} | Rb m/25E Data Terminal")
+                        
+                        await interaction.followup.send(embed=embed)
+                    else:
+                        await interaction.followup.send(f"⚠️ APIエラー (Status: {resp.status})")
+        except Exception as e:
+            await interaction.followup.send(f"⚠️ 通信に失敗しました。APIが一時的にオフラインの可能性があります。")
 
 async def setup(bot):
     await bot.add_cog(WarThunder(bot))
