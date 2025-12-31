@@ -8,7 +8,7 @@ class Countdown(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @app_commands.command(name="countdown", description="目標時刻までを精密に、かつ美しく計測します")
+    @app_commands.command(name="countdown", description="目標時刻までを精密に計測します")
     @app_commands.describe(
         title="名称",
         date="日付 (YYYY/MM/DD)",
