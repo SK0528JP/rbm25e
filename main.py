@@ -61,6 +61,7 @@ class Rb_m25_Bot(commands.Bot):
             "cogs.gallery", 
             "cogs.exchange",
             "cogs.ranking",
+            "cogs.broadcast",
             "cogs.server",
             "cogs.wt",         # 兵器データユニット
             "cogs.ai",
