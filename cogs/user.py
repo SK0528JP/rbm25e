@@ -1,7 +1,7 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 import re
 
 # システム定数
@@ -48,10 +48,21 @@ class User(commands.Cog):
         return f"[{' / '.join(devices)}]" if devices else ""
 
     @app_commands.command(name="user", description="対象の公開情報・活動状況・資産データを調査します")
-    @app_commands.describe(target="ユーザーID、またはメンション（未入力で自分を調査）")
-    async def user_info(self, it: discord.Interaction, target: str = None):
-        # 実行ユーザーのみに表示 (Ephemeral)
-        await it.response.defer(ephemeral=True)
+    @app_commands.describe(
+        target="ユーザーID、またはメンション（未入力で自分を調査）",
+        mode="結果の表示モード（デフォルト: 自分のみ）"
+    )
+    @app_commands.choices(mode=[
+        app_commands.Choice(name="🔒 自分のみ表示 (Private)", value=1),
+        app_commands.Choice(name="📢 公開して表示 (Public)", value=0)
+    ])
+    async def user_info(self, it: discord.Interaction, target: str = None, mode: app_commands.Choice[int] = None):
+        # modeが未指定の場合はデフォルトで「自分のみ(1)」とする
+        is_ephemeral = True
+        if mode and mode.value == 0:
+            is_ephemeral = False
+
+        await it.response.defer(ephemeral=is_ephemeral)
 
         user_obj = None
         full_user = None
@@ -71,9 +82,9 @@ class User(commands.Cog):
                     if user_obj is None:
                         user_obj = await self.bot.fetch_user(target_id)
                 else:
-                    return await it.followup.send("❌ 有効なユーザーIDまたはメンションを入力してください。", ephemeral=True)
+                    return await it.followup.send("❌ 有効なユーザーIDまたはメンションを入力してください。", ephemeral=is_ephemeral)
         except Exception as e:
-            return await it.followup.send(f"❌ ユーザー情報を取得できませんでした: {e}", ephemeral=True)
+            return await it.followup.send(f"❌ ユーザー情報を取得できませんでした: {e}", ephemeral=is_ephemeral)
 
         is_member = isinstance(user_obj, discord.Member)
         
@@ -95,6 +106,9 @@ class User(commands.Cog):
             title=f"📋 ユーザー情報調査レポート: {full_user.global_name or full_user.name}",
             description=f"ユーザー名: `@{full_user.name}`",
             color=accent_color,
+            # タイムスタンプはEmbed標準機能を使うとユーザーのローカル時間に合うが、
+            # フッターにJST強制表示をご希望とのことなので、ここは現在時刻を入れずとも良いが
+            # 一応メタデータとして入れておく（表示には影響しない）
             timestamp=datetime.now()
         )
         embed.set_thumbnail(url=full_user.display_avatar.url)
@@ -102,7 +116,7 @@ class User(commands.Cog):
         # --- A: 基本識別情報 (全サーバー共通取得可能) ---
         created_ts = int(full_user.created_at.timestamp())
         identity = (
-            f"**ID**: `{full_user.id}`\n"
+            f"**ID**: `{full_user.id}`\n"  # ` ` で囲むことでコピーしやすく
             f"**アカウント作成**: <t:{created_ts}:D> (<t:{created_ts}:R>)\n"
             f"**公開バッジ**: {self.get_user_badges(full_user)}"
         )
@@ -182,11 +196,16 @@ class User(commands.Cog):
             links.append(f"[バナー]({full_user.banner.url})")
         embed.add_field(name="🔗 メディアリンク", value=" | ".join(links), inline=True)
 
-        # フッター判定
-        footer_label = "⚠️ Rb m/25E 開発者" if full_user.id == ADMIN_ID else "Rb m/25E ユーザー調査モジュール"
-        embed.set_footer(text=f"{footer_label} | {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+        # フッター設定 (JST対応 & 秒数表示)
+        # UTC+9 (JST) のタイムゾーンを定義
+        JST = timezone(timedelta(hours=9), 'JST')
+        now_jst = datetime.now(JST)
+        timestamp_str = now_jst.strftime('%Y-%m-%d %H:%M:%S')
 
-        await it.followup.send(embed=embed, ephemeral=True)
+        footer_label = "⚜️ Rb m/25E ユーザー調査モジュール" if full_user.id == ADMIN_ID else "Rb m/25E ユーザー調査モジュール"
+        embed.set_footer(text=f"{footer_label} | {timestamp_str}")
+
+        await it.followup.send(embed=embed, ephemeral=is_ephemeral)
 
 async def setup(bot):
     # ledger_instanceはmain.pyで定義されている前提
