@@ -68,6 +68,7 @@ class Rb_m25_Bot(commands.Bot):
             "cogs.countdown",  # 戦術時計ユニット
             "cogs.fishing", 
             "cogs.contact",
+            "cogs.translator",
             "cogs.study"
         ]
         
