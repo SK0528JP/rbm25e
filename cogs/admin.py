@@ -25,14 +25,14 @@ class Admin(commands.Cog):
         return False
 
     # --- サーバーリスト確認 (展開状況把握) ---
-    @app_commands.command(name="admin_servers", description="[管理者専用] Botの展開サーバー状況を確認します")
+    @app_commands.command(name="admin_servers", description="[管理者専用] Botが展開中のサーバー状況を確認します")
     async def admin_servers(self, it: discord.Interaction):
         if not await self.is_admin(it): return
         await it.response.defer(ephemeral=True)
 
         guilds = self.bot.guilds
         if not guilds:
-            return await it.followup.send("📡 稼働中のサーバーは確認できません。", ephemeral=True)
+            return await it.followup.send("📡 稼働中のサーバーは確認できませんでした。", ephemeral=True)
 
         embed = discord.Embed(
             title="🛰️ Rb m/25E 展開状況レポート",
@@ -49,8 +49,8 @@ class Admin(commands.Cog):
             owner = guild.owner or await self.bot.fetch_user(guild.owner_id)
             server_info.append(
                 f"🔹 **{guild.name}**\n"
-                f"   ID: `{guild.id}` | 員数: `{guild.member_count}`名\n"
-                f"   指揮官: `{owner.name}`"
+                f"   ID: `{guild.id}` | ユーザー数: `{guild.member_count}`名\n"
+                f"   サーバー管理者: `{owner.name}`"
             )
 
         # 内容が長すぎる場合は分割
@@ -60,7 +60,7 @@ class Admin(commands.Cog):
 
         embed.description = description
         embed.add_field(name="📊 統計データ", value=f"展開サーバー数: `{len(guilds)}` / 観測下ユーザー総数: `{total_members}`名")
-        embed.set_footer(text="Rb m/25 行政プロトコル")
+        embed.set_footer(text="Rb m/25E 管理者専用システム")
 
         await it.followup.send(embed=embed, ephemeral=True)
 
@@ -77,7 +77,7 @@ class Admin(commands.Cog):
         embed = discord.Embed(title="資産付与完了", color=0x94a3b8)
         embed.add_field(name="対象者", value=target.name, inline=True)
         embed.add_field(name="付与額", value=f"```fix\n+ {amount:,} cr\n```", inline=False)
-        embed.set_footer(text="Rb m/25 行政プロトコル")
+        embed.set_footer(text="Rb m/25E 管理者専用システム")
         
         await it.response.send_message(embed=embed)
 
@@ -94,20 +94,20 @@ class Admin(commands.Cog):
         embed = discord.Embed(title="資産回収完了", color=0x475569)
         embed.add_field(name="対象者", value=target.name, inline=True)
         embed.add_field(name="回収額", value=f"```diff\n- {amount:,} cr\n```", inline=False)
-        embed.set_footer(text="Rb m/25 行政プロトコル")
+        embed.set_footer(text="Rb m/25E 管理者専用システム")
         
         await it.response.send_message(embed=embed)
 
     # --- システム再起動 ---
-    @app_commands.command(name="restart", description="システムを再起動（終了）します")
+    @app_commands.command(name="shutdown", description="BOTシステムを終了します")
     async def restart(self, it: discord.Interaction):
         if not await self.is_admin(it): return
         
         embed = discord.Embed(title="システムメンテナンス", description="シャットダウンを開始します...", color=0x1e293b)
-        embed.set_footer(text="Rb m/25 行政プロトコル")
+        embed.set_footer(text="Rb m/25E 管理者専用システム")
         
         await it.response.send_message(embed=embed)
-        print(f"[SYSTEM] 再起動が実行されました: 実行者 {it.user.name}")
+        print(f"[SYSTEM] シャットダウンコマンドが実行されました: 実行者 {it.user.name}")
         
         sys.exit()
 
