@@ -64,6 +64,7 @@ class Rb_m25_Bot(commands.Bot):
             "cogs.translator",
             "cogs.invite_search",
             "cogs.moderation",
+            "cogs.rolepanel",
             "cogs.study"
         ]
         
