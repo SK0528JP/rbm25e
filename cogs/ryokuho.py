@@ -94,7 +94,7 @@ class Ryokuho(commands.Cog):
             user_data["active_session_start"] = datetime.now(JST).isoformat()
             
             if channel:
-                await channel.send(f"@here りょくほがオンラインになりました。\n{msg}")
+                await channel.send(f"☢｜りょくほがオンラインになりました。\n{msg}")
             
             # オンライン開始時点でも保存（再起動で開始時刻が消えるのを防ぐ）
             self.bot.ledger.save()
