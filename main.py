@@ -1,4 +1,4 @@
-import discord  # 小文字に修正
+import discord 
 from discord.ext import commands, tasks
 import os
 from datetime import datetime, timedelta, timezone
