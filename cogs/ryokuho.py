@@ -10,14 +10,14 @@ class Ryokuho(commands.Cog):
         self.bot = bot
         # 監視対象ユーザーのリスト
         self.target_user_ids = [
-            1128950351362535456, # りょくほ
-            719498030549696582, #sera
-            1315637350772244532, #satuki
-            973500097675558913, #eiki
-            1105119266086342757, #ogi
-            943574149048205392, #aoto
-            840821281838202880, #sho
-            929653926494621766, #aoba
+            1128950351362535456, # ryokuho
+            719498030549696582,  # sera
+            1315637350772244532, # satuki
+            973500097675558913,  # eiki
+            1105119266086342757, # ogi
+            943574149048205392,  # aoto
+            840821281838202880,  # sho
+            929653926494621766,  # aoba
             844162909919772683   # hiro
         ]
         self.target_channel_id = 1367349493116440639
@@ -28,6 +28,18 @@ class Ryokuho(commands.Cog):
         hours = seconds // 3600
         minutes = (seconds % 3600) // 60
         return f"{hours}時間{minutes}分"
+
+    def get_device(self, member):
+        """オンライン時の接続端末を判定"""
+        devices = []
+        if member.desktop_status != discord.Status.offline:
+            devices.append("💻 PC")
+        if member.mobile_status != discord.Status.offline:
+            devices.append("📱 スマホ")
+        if member.web_status != discord.Status.offline:
+            devices.append("🌐 ブラウザ")
+        
+        return " & ".join(devices) if devices else "不明"
 
     def calculate_stats(self, user_data):
         now = datetime.now(JST)
@@ -46,9 +58,11 @@ class Ryokuho(commands.Cog):
 
         for log in logs:
             try:
+                # 文字列時刻をdatetimeオブジェクトへ変換
                 login_at = datetime.fromisoformat(log["login_at"])
                 if login_at.tzinfo is None:
                     login_at = login_at.replace(tzinfo=JST)
+                
                 sec = log["duration_sec"]
 
                 if login_at >= start_year: stats["今年"]["sec"] += sec
@@ -57,13 +71,13 @@ class Ryokuho(commands.Cog):
                 if login_at >= start_today:
                     stats["今日"]["sec"] += sec
                     stats["今日"]["count"] += 1
-            except:
+            except (ValueError, KeyError):
                 continue
         return stats
 
     @commands.Cog.listener()
     async def on_presence_update(self, before, after):
-        # リストに含まれるユーザーかつ、ステータスの実質的な変化のみ検知
+        # リストに含まれるユーザー以外、またはステータスが変わっていない場合は無視
         if after.id not in self.target_user_ids or before.status == after.status:
             return
 
@@ -72,15 +86,17 @@ class Ryokuho(commands.Cog):
 
         user_data = self.bot.ledger.get_user(after.id)
         channel = self.bot.get_channel(self.target_channel_id)
-        user_name = after.display_name # サーバーでの表示名を取得
+        user_name = after.display_name
 
         # --- [ログイン検知] ---
         if after.status == discord.Status.online:
             stats = self.calculate_stats(user_data)
+            device_name = self.get_device(after)
             count_today = stats["今日"]["count"] + 1
             
             msg = (
                 f"📊 **オンライン統計 ({user_name})**\n"
+                f"・使用端末: **{device_name}**\n"
                 f"・本日のログイン回数: **{count_today}回目**\n"
                 f"・今日の総オンライン時間: {self.format_duration(stats['今日']['sec'])}\n"
                 f"・今週の合計: {self.format_duration(stats['今週']['sec'])}\n"
@@ -88,11 +104,14 @@ class Ryokuho(commands.Cog):
                 f"・今年の合計: {self.format_duration(stats['今年']['sec'])}"
             )
             
+            # セッション開始時間を記録
             user_data["active_session_start"] = datetime.now(JST).isoformat()
             
             if channel:
-                await channel.send(f" {user_name} がオンラインになりました。\n{msg}")
+                # @here 通知付きで送信
+                await channel.send(f"@here {user_name} がオンラインになりました。\n{msg}")
             
+            # 即時保存（再起動対策）
             self.bot.ledger.save()
 
         # --- [ログアウト検知] ---
@@ -115,10 +134,11 @@ class Ryokuho(commands.Cog):
                         "duration_sec": max(0, duration)
                     })
                     
+                    # ログアウト時にデータを確定保存
                     self.bot.ledger.save()
-                    print(f"💾 [Ryokuho System] Log Saved for {user_name}: {duration}s")
+                    print(f"💾 [Ryokuho] Log Saved for {user_name}: {duration}s")
                 except Exception as e:
-                    print(f"❌ [Ryokuho System] Error: {e}")
+                    print(f"❌ [Ryokuho] Error: {e}")
 
 async def setup(bot):
     await bot.add_cog(Ryokuho(bot))
